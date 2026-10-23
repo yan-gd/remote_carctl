@@ -1,93 +1,45 @@
-# 前端部署：agilex.yoyoyan.cn
+# exp3 前端部署（React 19 + Vite 7）
 
-把 Flutter Web 构建产物部署到云服务器，由 nginx 同时提供静态文件和 `/api/` 反向代理。本文假设：
+前端是 React 19 + TypeScript + Vite 7 的单页应用，构建产物在 `dist/`。生产环境由 nginx 同源提供静态文件，并把 `/api/` 反向代理到只监听 `127.0.0.1:8080` 的 Spring Boot 后端。
 
-| 项 | 值 |
-| --- | --- |
-| 域名 | `agilex.yoyoyan.cn` |
-| 服务器 | `47.109.132.238`，`root` 登录 |
-| 后端 | `/opt/remote_carctl/backend`，`remote-carctl.service`，监听 8080 |
-| 前端目录 | `/opt/remote_carctl/frontend`（`index.html` 直接位于此目录） |
-| nginx 站点 | `/etc/nginx/sites-available/agilex.yoyoyan.cn` |
-| 证书 | Let's Encrypt，`/etc/letsencrypt/live/agilex.yoyoyan.cn/` |
+架构与约定：
 
-> 后端**只监听 127.0.0.1:8080**，公网只通过 nginx 暴露 80/443。这样 8080 不再对公网开放，Swagger 也可在 nginx 层关闭。
+- 源码：`/opt/remote_carctl/frontend`
+- 部署目录：**`/var/www/agilex`**（不要用源码目录当 nginx root）
+- 构建产物：`dist/`（`index.html` + `assets/` 哈希文件）
+- 域名：`agilex.yoyoyan.cn` → 服务器公网 IP
+- 生产同源，不需要 `VITE_API_BASE_URL`；开发环境由 Vite 代理 `/api` 到本机 8080
 
-> **2026-10-23 实测状态**：`agilex.yoyoyan.cn` 已解析到 `47.109.132.238`；`http://agilex.yoyoyan.cn/` 返回 **主机面板默认的“没有找到站点”页**（nginx，且已带 HSTS），`/api/*` 为 404，`https://` 尚无可用证书。部署前先确认 nginx 由谁管理：
->
-> - 若是系统 nginx（`/etc/nginx`），按本文第 2–5 节执行；
-> - 若是**宝塔/BT 面板或主机控制面板**，不要直接覆盖系统配置，按[附录 A](#附录-a宝塔面板部署)在面板里添加站点；
-> - SSH 目前不接受本机公钥（`Permission denied (publickey,password)`），需要用户提供密码/密钥或由用户执行命令。
+## 1. 本地构建并上传（推荐）
 
-## 1. DNS 与网络
-
-2026-10-23 已确认 A 记录存在，可跳过记录添加，直接验证：
-
-```bash
-dig +short agilex.yoyoyan.cn
+```powershell
+cd E:\qq157\Desktop\class\software\exp3\frontend
+npm ci
+npm run typecheck
+npm test
+npm run build
 ```
 
-云服务器安全组放行 **TCP 80、443**（`1883` 保留给小车 MQTT，不要删除）。服务器上 UFW 若启用：
+如果已有 `frontend/build/agilex-deploy.zip`（内含 `web/` 与 `deploy/`），可直接上传：
 
-```bash
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw status
+```powershell
+scp .\build\agilex-deploy.zip root@47.109.132.238:/tmp/
 ```
-
-在 nginx 验证通过后再关闭公网 8080：
-
-```bash
-sudo ufw delete allow 8080/tcp    # 若之前为 Swagger 放行过
-```
-
-## 2. 后端改为只监听本机
-
-编辑 `/etc/remote-carctl/backend.env`：
-
-```bash
-sudo sed -i 's/^BIND_ADDRESS=.*/BIND_ADDRESS=127.0.0.1/' /etc/remote-carctl/backend.env
-```
-
-确认生产 CORS 来源。**必须显式包含公网 HTTPS 源**，否则浏览器登录会被 Spring 的 CORS 过滤器以 403 拒绝（Spring 只看到 nginx 代理后的 `http://127.0.0.1:8080`，不会自动认为同源）：
-
-```bash
-sudo grep -n '^PATROL_WEB_ALLOWED_ORIGINS=' /etc/remote-carctl/backend.env || true
-# 删除旧行后追加唯一一条（避免出现重复配置）：
-sudo sed -i '/^PATROL_WEB_ALLOWED_ORIGINS=/d' /etc/remote-carctl/backend.env
-printf 'PATROL_WEB_ALLOWED_ORIGINS=https://agilex.yoyoyan.cn\n' | sudo tee -a /etc/remote-carctl/backend.env
-```
-
-开发来源（`http://127.0.0.1:5173`）只在 `flutter run` 时加入，不要写进生产配置。
-
-```bash
-sudo systemctl restart remote-carctl
-sudo systemctl status remote-carctl --no-pager
-ss -ltnp 'sport = :8080'          # 期望 127.0.0.1:8080，而不是 *:8080
-curl --noproxy '*' -sS -i http://127.0.0.1:8080/api/v1/robot/status | head
-```
-
-最后一条应返回 **401 JSON**（未带 JWT）；返回 HTML 说明请求没打到后端。
-
-## 3. 安装 nginx 与上传构建产物
 
 服务器：
 
 ```bash
-sudo apt update
-sudo apt install -y nginx certbot
-sudo systemctl enable --now nginx
-sudo install -d -m 755 /opt/remote_carctl/frontend
-sudo install -d -m 755 /var/www/certbot
-sudo install -d -m 755 /etc/nginx/snippets
+cd /tmp
+rm -rf agilex-deploy
+unzip -o agilex-deploy.zip -d agilex-deploy
+sudo install -d -m 755 /var/www/agilex
+sudo rsync -a --delete /tmp/agilex-deploy/web/ /var/www/agilex/
 ```
 
-本地 Windows（在 `exp3/frontend` 构建后执行）：
+或上传 `dist/`：
 
 ```powershell
-flutter build web --release --no-web-resources-cdn --no-wasm-dry-run
-
-scp -r .\build\web\* root@47.109.132.238:/tmp/agilex-web/
+scp -r .\dist\* root@47.109.132.238:/tmp/agilex-web/
 scp .\deploy\security-headers.conf root@47.109.132.238:/tmp/agilex-security-headers.conf
 scp .\deploy\nginx-http.conf root@47.109.132.238:/tmp/agilex-http.conf
 ```
@@ -95,17 +47,79 @@ scp .\deploy\nginx-http.conf root@47.109.132.238:/tmp/agilex-http.conf
 服务器：
 
 ```bash
-sudo rsync -a --delete /tmp/agilex-web/ /opt/remote_carctl/frontend/
-sudo install -m 644 /tmp/agilex-security-headers.conf /etc/nginx/snippets/agilex-security-headers.conf
-sudo install -m 644 /tmp/agilex-http.conf /etc/nginx/sites-available/agilex.yoyoyan.cn
-sudo ln -sfn /etc/nginx/sites-available/agilex.yoyoyan.cn /etc/nginx/sites-enabled/agilex.yoyoyan.cn
+sudo apt update
+sudo apt install -y nginx certbot
+sudo systemctl enable --now nginx
+sudo install -d -m 755 /var/www/agilex /var/www/certbot
+sudo install -d -m 755 /etc/nginx/snippets
+
+sudo rsync -a --delete /tmp/agilex-web/ /var/www/agilex/
+sudo install -m 644 /tmp/agilex-security-headers.conf \
+  /etc/nginx/snippets/agilex-security-headers.conf
+sudo install -m 644 /tmp/agilex-http.conf \
+  /etc/nginx/sites-available/agilex.yoyoyan.cn
+sudo ln -sfn /etc/nginx/sites-available/agilex.yoyoyan.cn \
+  /etc/nginx/sites-enabled/agilex.yoyoyan.cn
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl reload nginx
+
 curl -sS -I http://agilex.yoyoyan.cn/
 ```
 
-预期 `HTTP/1.1 200`，并能看到 `text/html`。若 403/404，检查 `/opt/remote_carctl/frontend/index.html` 是否存在、nginx `root` 是否一致。
+预期 `HTTP/1.1 200`，页面是 React 控制台。若 403/404，检查 `/var/www/agilex/index.html` 是否存在、nginx `root` 是否为 `/var/www/agilex`。
+
+## 2. 在服务器构建（可选，需要 Node）
+
+服务器没有 Node 时不要安装整套工具链，直接上传本地 `dist/`。有 Node 20.19+ / 22.12+ 时：
+
+```bash
+cd /opt/remote_carctl/frontend
+node --version
+bash deploy/build-and-deploy.sh
+```
+
+脚本会执行 `npm ci → typecheck → test → build`，再 `rsync dist/ /var/www/agilex/`。也可以手动：
+
+```bash
+cd /opt/remote_carctl/frontend
+npm ci
+npm run typecheck
+npm test
+npm run build
+
+sudo install -d -m 755 /var/www/agilex
+sudo rsync -a --delete dist/ /var/www/agilex/
+ls -l /var/www/agilex/index.html
+```
+
+## 3. 后端配置
+
+后端必须只监听本机，并显式允许生产 Origin：
+
+```bash
+cd /opt/remote_carctl/backend
+mvn clean install
+
+if grep -q '^BIND_ADDRESS=' /etc/remote-carctl/backend.env; then
+  sudo sed -i 's/^BIND_ADDRESS=.*/BIND_ADDRESS=127.0.0.1/' /etc/remote-carctl/backend.env
+else
+  echo 'BIND_ADDRESS=127.0.0.1' | sudo tee -a /etc/remote-carctl/backend.env
+fi
+
+sudo sed -i '/^PATROL_WEB_ALLOWED_ORIGINS=/d' /etc/remote-carctl/backend.env
+printf '\nPATROL_WEB_ALLOWED_ORIGINS=https://agilex.yoyoyan.cn\n' \
+  | sudo tee -a /etc/remote-carctl/backend.env
+
+sudo systemctl restart remote-carctl
+sleep 3
+sudo systemctl is-active remote-carctl
+sudo ss -ltnp 'sport = :8080'
+curl -sS -o /dev/null -w 'local_api=%{http_code}\n' \
+  http://127.0.0.1:8080/api/v1/robot/status
+```
+
+期望 `active`、`127.0.0.1:8080`、`401`。CORS 未包含生产 Origin 时，浏览器登录会返回 403。
 
 ## 4. 申请证书并切换 HTTPS
 
@@ -115,136 +129,100 @@ sudo certbot certonly --webroot -w /var/www/certbot \
   --agree-tos -m 你的邮箱@example.com --no-eff-email
 ```
 
-成功后确认证书文件：
+成功后：
 
 ```bash
-sudo ls -l /etc/letsencrypt/live/agilex.yoyoyan.cn/
-```
-
-上传并启用正式配置：
-
-```powershell
-scp .\deploy\nginx-tls.conf root@47.109.132.238:/tmp/agilex-tls.conf
-```
-
-```bash
-sudo install -m 644 /tmp/agilex-tls.conf /etc/nginx/sites-available/agilex.yoyoyan.cn
+sudo install -m 644 /opt/remote_carctl/frontend/deploy/nginx-tls.conf \
+  /etc/nginx/sites-available/agilex.yoyoyan.cn
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-续期由系统 `certbot.timer` 负责，验证：
-
-```bash
-systemctl list-timers | grep certbot
-sudo certbot renew --dry-run
-```
+如果部署包在 `/tmp/agilex-deploy`，把路径换成 `/tmp/agilex-deploy/deploy/nginx-tls.conf`。
 
 ## 5. 验收
 
 ```bash
-# 1) HTTP 跳转到 HTTPS
 curl -sS -I http://agilex.yoyoyan.cn/ | grep -Ei 'HTTP/|location'
-
-# 2) HTTPS 与安全头
-curl -sS -D - -o /dev/null https://agilex.yoyoyan.cn/ \
-  | grep -Ei 'HTTP/|strict-transport|content-security|x-content-type|x-frame|referrer'
-
-# 3) API 反向代理：未登录应返回 JSON 401，而不是 HTML
-curl -sS -i https://agilex.yoyoyan.cn/api/v1/robot/status | head -20
-
-# 4) 证书链
-openssl s_client -connect agilex.yoyoyan.cn:443 -servername agilex.yoyoyan.cn </dev/null 2>/dev/null \
-  | openssl x509 -noout -subject -issuer -dates
+curl -sS -I https://agilex.yoyoyan.cn/ | grep -Ei 'HTTP/|strict-transport|content-security'
+curl -sS -i https://agilex.yoyoyan.cn/api/v1/robot/status | head -15
+curl -sS -o /dev/null -w 'swagger=%{http_code}\n' \
+  https://agilex.yoyoyan.cn/swagger-ui.html
 ```
 
-浏览器打开 <https://agilex.yoyoyan.cn/>：
+期望：
 
-1. 用后端账号（如 `demo_operator`）登录；
-2. 总览应显示 `在线`、`MQTT 已连接`、真实电压（实车时）；
-3. 控制页按住前进，观察 `/api/v1/robot/control` 每 200 ms 一条；
-4. 松开后后端状态在 1 秒内回到停止，日志页出现 `机器人控制`。
+- HTTP 301 到 HTTPS
+- HTTPS 200，包含 HSTS/CSP
+- API 未登录返回 **JSON 401**
+- `swagger=404`
 
-Swagger 默认被 nginx 屏蔽。需要时通过 SSH 隧道访问：
+自动检查：
 
 ```bash
-ssh -L 8080:127.0.0.1:8080 root@47.109.132.238
-# 本机打开 http://127.0.0.1:8080/swagger-ui.html
+cd /opt/remote_carctl/frontend
+bash deploy/smoke-test.sh agilex.yoyoyan.cn
 ```
 
-## 6. 更新与回滚
+脚本检查跳转、HTML、HSTS、CSP、`X-Content-Type-Options`、`X-Frame-Options`、API 401、Swagger 404；只做未登录检查，不提交密码。
 
-更新前端（本地构建后）：
+浏览器打开 <https://agilex.yoyoyan.cn/>，用演示账号登录，检查总览、巡检、控制、告警、日志。前端令牌只在内存，刷新页面即退出，这是预期行为。
 
-```powershell
-flutter build web --release --no-web-resources-cdn --no-wasm-dry-run
-scp -r .\build\web root@47.109.132.238:/tmp/agilex-web-new
-```
+## 6. 宝塔/BT 面板
+
+若 `ls -d /www/server/panel` 存在，按面板操作，不要直接覆盖系统 nginx 配置：
+
+1. 网站 → 添加站点：`agilex.yoyoyan.cn`，根目录 `/var/www/agilex`，纯静态。
+2. SSL → Let's Encrypt，申请后开启强制 HTTPS。
+3. 反向代理：代理目录 `/api` → 目标 `http://127.0.0.1:8080`，发送域名 `$host`。
+4. 把 `security-headers.conf` 放到 `/www/server/panel/vhost/nginx/agilex-security-headers.conf`，在站点 `server {}` 里 include。
+5. 重载：
 
 ```bash
-sudo cp -a /opt/remote_carctl/frontend /opt/remote_carctl/frontend.bak-$(date +%F-%H%M)
-sudo rsync -a --delete /tmp/agilex-web-new/ /opt/remote_carctl/frontend/
+sudo /www/server/nginx/sbin/nginx -t
+sudo /www/server/nginx/sbin/nginx -s reload
 ```
 
-`index.html` 与 `main.dart.js` 配置为不缓存，刷新浏览器即可加载新版本，无需重启 nginx。
+## 7. 更新与回滚
+
+更新：
+
+```bash
+cd /opt/remote_carctl/frontend
+bash deploy/build-and-deploy.sh
+# 或上传新的 dist/ 后：
+sudo rsync -a --delete /tmp/agilex-web/ /var/www/agilex/
+```
 
 回滚：
 
 ```bash
-sudo rsync -a --delete /opt/remote_carctl/frontend.bak-YYYY-MM-DD-HHMM/ /opt/remote_carctl/frontend/
+sudo cp -a /var/www/agilex /var/www/agilex.bak-$(date +%F-%H%M)
+sudo rsync -a --delete /tmp/agilex-web-old/ /var/www/agilex/
 ```
 
-后端更新仍按原流程：`mvn clean install` 后 `sudo systemctl restart remote-carctl`。前端发版不要求重启后端。
-
-## 7. 安全检查清单
-
-- [ ] 公网只开 80/443；8080 不再对外（后端 `BIND_ADDRESS=127.0.0.1`）。
-- [ ] `PATROL_WEB_ALLOWED_ORIGINS` 显式包含 `https://agilex.yoyoyan.cn`；没有其他无关来源。
-- [ ] 后端已启用 `server.forward-headers-strategy=framework`，nginx 透传 `Host`、`X-Forwarded-Proto`、`X-Forwarded-Host`。
-- [ ] 证书有效，HTTP 301 到 HTTPS，HSTS/CSP 响应头存在。
-- [ ] nginx 生产配置默认返回 404 给 `/swagger-ui`、`/v3/api-docs`。
-- [ ] 登录接口限流生效：连续错误登录会得到 429。
-- [ ] 演示账号使用强密码；不要把密码写进仓库、文档或聊天记录。
-- [ ] 构建产物不含 source map：`build/web` 下无 `.map` 文件。
-- [ ] 浏览器 DevTools 中没有对 `fonts.gstatic.com` 等外部域名的请求（字体已内置）。
-- [ ] UFW 与云安全组一致；`1883` 只允许小车来源或改用 MQTT TLS（后续项）。
-- [ ] 定期备份 `/opt/remote_carctl/backend/data/exp2.db` 与 `exp2.db.jwt-key`。
-- [ ] `journalctl -u remote-carctl` 不包含密码、JWT 或请求体。
+`index.html` 为 `no-store`，`assets/` 是内容哈希文件，可长期缓存；发版后刷新页面即可加载新 bundle。
 
 ## 8. 常见问题
 
-| 现象 | 排查 |
+| 现象 | 处理 |
 | --- | --- |
-| 502 Bad Gateway | 后端未启动、端口不是 18080/8080，或 `BIND_ADDRESS` 不是 127.0.0.1；`ss -ltnp`、`journalctl -u remote-carctl -n 50` |
-| 页面空白 / 白屏 | 浏览器控制台看 CSP；确认 `deploy/security-headers.conf` 与构建匹配；确认 `canvaskit/` 已上传 |
-| 刷新子路径 404 | `try_files $uri $uri/ /index.html;` 是否保留 |
-| 登录 429 | nginx 登录限流；等待一分钟或调整 `agilex_login` 速率 |
-| 登录 401 `LOGIN_FAILED` | 用的是后端账号，不是 MQTT `robot`；密码区分大小写 |
-| 控制 503 | 后端到 Broker 的 MQTT 连接；与前端无关 |
-| 控制 409 | 机器人心跳超时；检查小车桥接和 `robot/.../heartbeat` |
-| CORS 报错 | 生产构建不要传 `API_BASE_URL`，保持同源 |
-| 中文显示方框 | 字体子集缺少该字；见 `frontend/README.md` 第 6 节 |
+| 登录 403 | `PATROL_WEB_ALLOWED_ORIGINS` 必须包含 `https://agilex.yoyoyan.cn`，并确认 `server.forward-headers-strategy=framework` |
+| 页面 404/403 | nginx `root` 是否为 `/var/www/agilex`，`index.html` 是否存在 |
+| 刷新子路径 404 | `location /` 必须有 `try_files $uri $uri/ /index.html;` |
+| 页面空白，控制台 CSP 报错 | 生产构建不能有内联脚本/样式；本配置已按 Vite 构建验证。若自行改动构建，请同步调整 CSP |
 | 证书续期失败 | 80 端口或 `/.well-known/acme-challenge/` 被拦截；`sudo certbot renew --dry-run -v` |
+| `git pull` 后只有 `backend/` | 仓库启用了 sparse-checkout：`git sparse-checkout disable`，再 `git ls-files frontend \| wc -l` |
+| 登录 429 | nginx 对登录接口限流 10 次/分钟（burst 5），等待后重试 |
 
-## 附录 A：宝塔面板部署
+## 9. 安全检查清单
 
-如果 80 端口由宝塔/BT 面板管理（当前默认页即为该面板的“没有找到站点”），不要去改 `/etc/nginx/sites-available`，在面板中操作：
-
-1. **添加站点**：网站 → 添加站点，域名 `agilex.yoyoyan.cn`，PHP 版本选“纯静态”，根目录设为 `/opt/remote_carctl/frontend`，不创建数据库/FTP。
-2. **上传产物**：把本地 `frontend/build/web/*` 上传到该根目录，确认根目录下有 `index.html`、`main.dart.js`、`canvaskit/`、`assets/`。
-3. **后端只监听本机**：SSH 执行第 2 节，或让面板终端执行 `sed` + `systemctl restart remote-carctl`；确认 `ss -ltnp` 为 `127.0.0.1:8080`。
-4. **反向代理**：站点设置 → 反向代理 → 添加，代理目录 `/api`，目标 URL `http://127.0.0.1:8080`，发送域名 `$host`。保存后 `curl -i https://agilex.yoyoyan.cn/api/v1/robot/status` 应为 JSON 401。
-5. **HTTPS**：站点设置 → SSL → Let's Encrypt，申请 `agilex.yoyoyan.cn` 证书，开启“强制 HTTPS”。面板会自动写 80→443 跳转和证书续期任务。
-6. **安全头与限流**：站点设置 → 配置文件，在 `server {}` 内加入：
-
-   ```nginx
-   include /www/server/panel/vhost/nginx/agilex-security-headers.conf;
-   ```
-
-   把本仓库的 `security-headers.conf` 上传到该路径。若面板配置已有 `add_header`，注意 nginx 只在当前层没有 `add_header` 时才继承 server 级头；必要时把安全头放到每个 `location`，或使用面板的“全局配置”。
-7. **登录限流**：`limit_req_zone` 必须位于 `http {}` 上下文，不能直接写在站点 `server {}`。可在面板“nginx 配置 → 全局”加入两行 zone，再在站点配置的 `/api/v1/auth/login` location 内加 `limit_req`；不熟悉时先跳过限流，但要在验收清单中标注未启用。
-8. **关闭默认站点/默认页**：面板 → 网站，确认 `agilex.yoyoyan.cn` 是唯一的默认站点，删除或停用不相关的默认站点；不要停用其他业务站点。
-9. **面板自身安全**：面板端口不要对公网开放；使用强密码、二次验证和 HTTPS；面板账号与服务器 root 密码分开管理。
-
-面板方式与系统 nginx 方式二选一，不要同时配置同一个 `server_name`。部署完成后按第 5 节验收，并在 `PROGRESS.md` 记录实际执行人、时间与输出。
-
+- [ ] 后端只监听 `127.0.0.1:8080`，公网只开 80/443
+- [ ] `PATROL_WEB_ALLOWED_ORIGINS=https://agilex.yoyoyan.cn`
+- [ ] HTTPS 证书有效，HTTP 301 到 HTTPS
+- [ ] HSTS、CSP、`X-Content-Type-Options`、`X-Frame-Options` 存在
+- [ ] `/swagger-ui`、`/v3/api-docs` 返回 404
+- [ ] 未登录 `/api/v1/**` 返回 JSON 401
+- [ ] 登录接口出现 429 限流（压测时）
+- [ ] 浏览器控制台无 CSP/网络错误
+- [ ] 前端令牌不落 localStorage/sessionStorage/URL

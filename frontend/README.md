@@ -1,121 +1,129 @@
-# exp3 前端（Flutter Web）
+# exp3 前端（React 19 + TypeScript + Vite 7）
 
-SCOUT MINI 远程巡检控制台。前后端分离：本目录是独立的 Flutter Web 应用，通过 `/api/v1/**` 调用 [`../backend`](../backend)。生产环境由 nginx 同源提供静态文件和 API 反向代理；开发时可指向本机后端并启用后端 CORS 白名单。
+SCOUT MINI 远程巡检控制台。前后端分离：本目录是独立的 React 单页应用，通过 `/api/v1/**` 调用 [`../backend`](../backend)。生产环境由 nginx 同源提供静态文件并反代 API；开发环境由 Vite 代理 `/api` 到本机后端，避免跨域。
 
-当前功能：
+## 功能
 
 | 页面 | 内容 |
 | --- | --- |
-| 登录 | 后端 JWT 登录；令牌只保存在内存，刷新页面即退出；401 自动回到登录页 |
+| 登录 | 后端 JWT 登录；令牌只保存在内存，刷新页面即退出；401 自动回登录页 |
 | 总览 | 机器人名称/编号、在线/MQTT/底盘状态、电池电压、速度、里程计位姿、最近回执、每秒轮询 |
-| 控制 | 按住方向键行驶（每 200 ms 续发）、松开/切换页面/退出登录自动 STOP、独立急停按钮；按角色禁用 |
-| 告警 | 级别/状态筛选、分页、MONITOR 可在页面确认告警 |
+| 巡检 | 路线点位增删改查、任务计划增删改查（草稿/已计划/已取消、计划时间）；OPERATOR 可编辑，其他角色只读 |
+| 控制 | 按住方向键行驶（每 200 ms 续发）、松开/切页/失焦/退出登录自动 STOP、独立急停；按角色禁用 |
+| 告警 | 级别/状态筛选、分页；MONITOR 可在页面确认告警 |
 | 日志 | 操作类型筛选、分页；后端按角色限制本人/全部范围 |
 
-未实现（后续迭代）：路线与任务的增删改查页面、移动端专门布局、WebSocket 实时推送。
+未实现：任务下发执行、导航/SLAM、WebSocket 实时推送、移动端专门布局。
 
 ## 界面预览
 
-以下截图来自本地模拟底盘联调（不是实车），仅用于确认功能与布局：
+本地模拟底盘联调截图（不是实车）：
 
 ![登录页](docs/screenshots/login.png)
 
 ![总览页](docs/screenshots/dashboard.png)
 
+![巡检路线](docs/screenshots/inspection-routes.png)
+
+![巡检任务](docs/screenshots/inspection-tasks.png)
+
 ![控制页](docs/screenshots/control.png)
+
+![告警页](docs/screenshots/alarms.png)
+
+![日志页](docs/screenshots/logs.png)
 
 ## 1. 开发
 
-需要 Flutter 3.44+（Dart 3.12+）。首次：
+需要 Node.js 20.19+ 或 22.12+（Vite 7 要求）。
 
-```powershell
-cd exp3\frontend
-flutter pub get
-flutter analyze
-flutter test
+```bash
+cd exp3/frontend
+npm ci
+npm run typecheck
+npm test
+npm run dev
 ```
 
-启动后端（示例，端口 8080），并在启动前允许 Flutter 开发服务器的跨域来源：
+打开 <http://127.0.0.1:5173/>。Vite 已把 `/api` 代理到 `http://127.0.0.1:8080`，后端开发启动示例：
 
-```powershell
-cd exp3\backend
-$env:PATROL_WEB_ALLOWED_ORIGINS = "http://127.0.0.1:5173,http://localhost:5173"
-.\scripts\Run-Demo.ps1 -MqttUrl tcp://127.0.0.1:1883
+```bash
+cd exp3/backend
+PATROL_WEB_ALLOWED_ORIGINS=http://127.0.0.1:5173 \
+  ./scripts/Run-Demo.ps1 -MqttUrl tcp://127.0.0.1:1883
 ```
 
-另开终端：
+> Vite 代理只解决浏览器同源；如果后端仍校验 `Origin`，把 `http://127.0.0.1:5173` 加入 `PATROL_WEB_ALLOWED_ORIGINS`。
 
-```powershell
-cd exp3\frontend
-flutter run -d chrome --web-port=5173 `
-  --dart-define=API_BASE_URL=http://127.0.0.1:8080
-```
-
-`API_BASE_URL` 只用于开发。生产构建不要传入它：留空表示同源请求，由 nginx 把 `/api/` 代理到后端。
-
-> 只用本机回环地址时允许 `http://`；其他地址必须是 `https://`，否则页面会显示“不安全的访问配置”并拒绝启动。
+`VITE_API_BASE_URL` 只用于需要直连后端的开发场景；生产构建不要设置，保持同源。非回环地址的 `http://` 会被前端拒绝启动。
 
 ## 2. 构建与部署
 
-```powershell
-cd exp3\frontend
-flutter build web --release --no-web-resources-cdn --no-wasm-dry-run
+```bash
+npm ci
+npm run typecheck
+npm test
+npm run build
 ```
 
-产物在 `build/web/`。`--no-web-resources-cdn` 让 CanvasKit 从本站加载，避免依赖 `gstatic.com`（国内网络经常不可用）。完整的服务器部署（DNS、nginx、HTTPS、反向代理、限流、验收）见 [`deploy/README.md`](deploy/README.md)。
+产物在 `dist/`。完整服务器部署（nginx、HTTPS、反向代理、限流、验收）见 [`deploy/README.md`](deploy/README.md)。
 
-nginx 配置在 [`deploy/nginx-http.conf`](deploy/nginx-http.conf)（首次申请证书）和 [`deploy/nginx-tls.conf`](deploy/nginx-tls.conf)（正式 HTTPS），安全响应头在 [`deploy/security-headers.conf`](deploy/security-headers.conf)。
+nginx 配置：
+
+- [`deploy/nginx-http.conf`](deploy/nginx-http.conf)：首次申请证书
+- [`deploy/nginx-tls.conf`](deploy/nginx-tls.conf)：正式 HTTPS
+- [`deploy/security-headers.conf`](deploy/security-headers.conf)：HSTS/CSP 等安全头
+
+部署目录是 `/var/www/agilex`，不是源码目录。
 
 ## 3. 目录
 
 ```text
-lib/
-  main.dart                 入口
-  config.dart               构建期 API 地址与超时；HTTPS 校验
-  core/api_client.dart      类型化 REST 客户端、错误码、401 回调
-  core/api_exception.dart   失败模型（status=0 表示网络/超时）
-  core/hold_controller.dart 按住续发、串行化、STOP 顺序保证
-  models/models.dart        后端 JSON 模型（null 不补值）
-  state/app_state.dart      会话、令牌、登录/退出/过期
-  state/robot_store.dart    1 Hz 状态轮询、命令发送
-  ui/pages/                 登录、总览、控制、告警、日志
-  ui/widgets/               状态标签、卡片、分页等
-  ui/theme.dart             Material 3 主题、内置中文字体
-assets/fonts/               Noto Sans SC 子集（OFL）与 Roboto（Apache-2.0）
-test/                       API 客户端、按住控制器、登录/总览 widget 测试
-deploy/                     nginx 与部署文档
+src/
+  main.tsx                    入口
+  App.tsx                     会话、登录/退出、页面切换
+  config.ts                   API 地址/超时/轮询间隔与 HTTPS 校验
+  api/client.ts               typed fetch 客户端、错误码、401 回调
+  api/types.ts                后端 JSON 类型
+  control/HoldController.ts   按住续发、串行化、STOP 顺序保证
+  control/useHoldControl.ts   React 绑定
+  robot/RobotContext.tsx      1 Hz 状态轮询、命令发送
+  components/                 布局、卡片、分页、Modal、状态标签
+  pages/                      登录、总览、巡检、控制、告警、日志
+  utils/format.ts             中文格式化
+  styles.css                  响应式主题（跟随系统深浅色）
+deploy/                       nginx 配置、部署与自检脚本
+docs/screenshots/             本地联调截图
 ```
 
 ## 4. 安全设计
 
-- **令牌**：登录响应中的 JWT 只存在 Dart 内存；不写 `localStorage`、`sessionStorage`、URL 或日志。刷新页面必须重新登录，XSS 无法读取持久令牌。
-- **传输**：生产强制 HTTPS；`API_BASE_URL` 若为非回环 `http://`，应用直接拒绝运行。nginx 配置 HSTS、CSP、`X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy`。
-- **CSP**：`connect-src 'self'`、`script-src 'self' 'wasm-unsafe-eval'`，无外部字体/CDN。字体已内置，避免中文回退到 `fonts.gstatic.com`。
-- **角色**：界面只做可用性提示；真正的权限由后端 `RobotCommandExecutor`、`RolePolicy` 和 Spring Security 校验。MONITOR 只能 STOP，VIEWER/MAINTAINER 只读。
-- **运动安全**：按住每 200 ms 续发；松开、指针取消、切换标签页、退出登录都会发送 STOP。请求串行化，STOP 会等正在进行的 keepalive 完成后再发，避免迟到 FORWARD 覆盖 STOP。即使浏览器崩溃，小车侧 0.6 s 看门狗仍会停车。
-- **错误处理**：只展示后端返回的中文错误信息；不记录请求体、密码或 Token。401 统一清除会话并回到登录页。
-- **登录入口**：nginx 对 `/api/v1/auth/login` 做每 IP 10 次/分钟限流（burst 5），生产默认屏蔽 Swagger。
-- **CORS**：生产 `backend.env` 必须设置 `PATROL_WEB_ALLOWED_ORIGINS=https://agilex.yoyoyan.cn`。虽然页面与 API 同域，但 Spring 只看到 nginx 代理后的请求，浏览器 POST 的 `Origin` 仍会被 CORS 过滤器校验；未列出会返回 403。开发时改为 `http://127.0.0.1:5173`。
+- **令牌**：JWT 仅存在 `ApiClient` 私有字段（内存），不写 `localStorage`、`sessionStorage`、URL 或日志；刷新页面必须重新登录。
+- **传输**：生产强制 HTTPS；`VITE_API_BASE_URL` 为非回环 `http://` 时应用直接显示配置错误。nginx 配置 HSTS/CSP/nosniff/X-Frame-Options。
+- **CSP**：`script-src 'self'`、`style-src 'self'`、`connect-src 'self'`，无内联脚本、无外部字体/CDN；生产构建已按此策略联调。
+- **角色**：界面只做禁用/隐藏；真正权限由后端 `RobotCommandExecutor`、`RolePolicy` 和 Spring Security 校验。MONITOR 只能 STOP，VIEWER 只读。
+- **运动安全**：按住每 200 ms 续发，请求串行化；松开、指针取消、失焦、切页、退出都 STOP；STOP 会等在途 keepalive 完成后发送，避免迟到 FORWARD 覆盖 STOP。小车侧 0.6 s 看门狗是最后兜底。
+- **退出并发**：退出时先尽力 STOP，再清除令牌；新登录的令牌不会被旧会话异步清理（`ApiClient` 单实例，登录后旧请求不会覆盖新 token）。
+- **错误处理**：只展示后端返回的中文消息；不记录请求体、密码或 Token。401 统一回到登录页。
+- **登录入口**：nginx 对 `/api/v1/auth/login` 限流 10 次/分钟（burst 5），生产屏蔽 Swagger。
+- **CORS**：生产 `backend.env` 必须设置 `PATROL_WEB_ALLOWED_ORIGINS=https://agilex.yoyoyan.cn`；未列出时浏览器登录会 403。
 
 ## 5. 测试与验证
 
-```powershell
-flutter analyze          # 0 issues
-flutter test             # 15 项：API 客户端 7、按住控制器 5、Widget 3
+```bash
+npm run typecheck   # tsc --noEmit
+npm test            # 13 项：API 7、HoldController 4、LoginPage 2
+npm run build       # Vite production build
 ```
 
-2026-10-23 本机联调（真实 Broker + 真实后端 JAR + 模拟底盘桥接 `--ros sim` + Chrome）已通过：
+2026-10-23 本机联调（真实 Broker + 后端 JAR + 模拟桥接 `--ros sim` + Chrome）：
 
-- 登录 → 总览显示真实在线状态、21.8 V 电压、位姿；
-- 按住前进 1.2 s 期间观察到 ≥4 条 FORWARD 请求，松开后发送 STOP，收到 `APPLIED` 回执，并回到 `STOPPED`；
-- 电量过低告警、机器人控制日志均能从后端读取；
-- 页面零未捕获异常、零控制台错误（CSP 下无外部字体请求）；
-- 使用 `deploy/nginx-tls.conf` 在本机 nginx 1.28.0（自签证书，端口 8443）完成 `nginx -t` 与同一套 E2E，验证 CSP/HSTS、`/api` 反代、Swagger 404 与 HTTP 301。
+- 登录 → 总览显示在线、21.80 V、位姿；
+- 按住前进 0.9 s 期间观察到 ≥3 条 FORWARD，松开后 STOP；
+- 路线创建/编辑/删除，任务创建/编辑为“已计划”，被任务引用的路线删除返回 409；
+- 告警页显示“电量过低”，日志页读取到控制/登录记录；
+- 操作员/监控员/观察员角色控制通过；
+- 真实 nginx 1.28 HTTPS（自签）下 CSP 无报错，控制 E2E 与巡检 CRUD E2E 通过；
+- 页面无未捕获异常；除预期的 409 外无控制台错误。
 
-这些是本地模拟底盘联调结果，**不等于实车运动验证**；实车测试仍需按 [`../PROGRESS.md`](../PROGRESS.md) 第 8 节进行。
-
-## 6. 字体说明
-
-内置 `NotoSansSC-Regular.otf` / `NotoSansSC-Bold.otf` 是 Noto Sans SC 的子集（SIL OFL 1.1），覆盖 GB2312 一级汉字、项目中的全部中文以及常用标点；`Roboto-*.ttf` 为 Apache-2.0。许可证见 `assets/fonts/OFL.txt` 与 `assets/fonts/Apache-2.0.txt`。
-
-如果以后新增了子集外的生僻字，页面可能出现方框。处理方式：重新用完整 Noto Sans SC 字体生成子集（把新文案加入字符集），或把该字加入 `assets/fonts` 的字体子集。构建产物不会访问 Google Fonts。
+这些是本地模拟底盘结果，**不等于实车运动验证**；实车测试仍需按 [`../PROGRESS.md`](../PROGRESS.md) 第 8 节进行。
