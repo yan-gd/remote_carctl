@@ -19,8 +19,8 @@
 | 本地 exp3 独立 Git 仓库 | `E:\qq157\Desktop\class\software\exp3` |
 | 远程 | [yan-gd/remote_carctl](https://github.com/yan-gd/remote_carctl) |
 | 分支 | `main` |
-| 最近一次功能提交（已推送） | `a9c77e7` — `feat(frontend): limit dot field to login and add wave animation`；前一条视觉提交为 `49ff8b1 feat(frontend): restyle console with dot background and frosted glass` |
-| 当前工作区 | 截至代码提交 `a9c77e7`；本次文档更新随后提交，具体以 `git log` / `git status` 为准 |
+| 最近一次功能提交（已推送） | `391fd94` — `feat(frontend): animate the login dot field with wave motion`；前一条为 `a9c77e7 feat(frontend): limit dot field to login and add wave animation` |
+| 当前工作区 | 截至代码提交 `391fd94`；本次文档更新随后提交，具体以 `git log` / `git status` 为准 |
 | 服务器 / 小车完整操作命令 | [README.md 第 3 节](README.md#3-quick-start服务器--小车端) |
 | 前端代码与开发说明 | [frontend/README.md](frontend/README.md) |
 | 前端部署（nginx/HTTPS/限流） | [frontend/deploy/README.md](frontend/deploy/README.md) |
@@ -338,7 +338,7 @@ cd /home/agilex/Desktop/remote_carctl/robot-bridge
 - 用本机 Chrome（Playwright）加载公网登录页：0 控制台错误、0 页面异常、0 个内联 `style`；`body` 背景 `rgb(255,255,255)`，点阵 `rgba(0,0,0,0.22)`、无遮罩，字体栈包含 Times New Roman 与宋体，登录面板为半透明玻璃 + `blur(32px)`。
 - **尚未用真实账号登录并验证总览/控制/告警/日志**；完整 `smoke-test.sh` 仍需用户在服务器执行。
 
-> **2026-10-24 追加版（已推送 `a9c77e7` 的登录页-only 版本；点阵波动增强待提交/部署）**：登录页-only 点阵、16px 点距、三道 `wave-ripple` + `dot-breathe`，登录后 dashboard 不再渲染点阵。最新增强加入 12s 点阵本体 `dot-wave` 漂移和 9s `dot-shimmer` 亮暗光带，本地构建为 `index-B6c2Iswy.js` / `index-CfqVvINQ.css`；线上仍是上一版 `index-CljkQ52s.js`。服务器拉取最新提交后按下方命令重新 build + rsync；验证时登录页应看到点阵本体缓慢波动，登录后背景应为无点阵的纯白/纯黑。
+> **2026-10-24 追加版（已推送 `391fd94`，尚未部署）**：登录页-only 点阵、16px 点距，点阵本体 12s `dot-wave` 漂移 + 9s `dot-shimmer` 亮暗光带 + 14s `dot-breathe` + 三道 `wave-ripple`；登录后 dashboard 不再渲染点阵。本地构建为 `index-B6c2Iswy.js` / `index-CfqVvINQ.css`；线上仍是上一版 `index-CljkQ52s.js`。服务器拉取 `391fd94` 后按下方命令重新 build + rsync；验证时登录页应看到点阵本体缓慢波动，登录后背景应为无点阵的纯白/纯黑。
 
 服务器实际上由 **BT 面板的 nginx** 提供服务，不是 systemd 的 `nginx.service`：
 
