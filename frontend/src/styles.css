@@ -42,7 +42,8 @@
   --danger: #9b2f34;
   --danger-soft: rgb(155 47 52 / 8%);
 
-  --dot-color: rgb(0 0 0 / 22%);
+  --dot-color: rgb(0 0 0 / 18%);
+  --wave-ring: rgb(0 0 0 / 10%);
 
   --shadow-card:
     0 1px 1px rgb(0 0 0 / 5%), 0 30px 65px -34px rgb(0 0 0 / 32%);
@@ -91,7 +92,8 @@
     --danger: #f0a3a3;
     --danger-soft: rgb(240 163 163 / 12%);
 
-    --dot-color: rgb(255 255 255 / 18%);
+    --dot-color: rgb(255 255 255 / 15%);
+    --wave-ring: rgb(255 255 255 / 12%);
 
     --shadow-card:
       0 1px 1px rgb(0 0 0 / 30%), 0 24px 60px -36px rgb(0 0 0 / 85%);
@@ -226,6 +228,30 @@ code {
   height: 100%;
   color: var(--dot-color);
   opacity: 1;
+  transform-origin: 50% 50%;
+  animation: dot-breathe 14s ease-in-out infinite alternate;
+}
+
+.atmosphere-wave {
+  position: absolute;
+  top: 46%;
+  left: 50%;
+  width: 12vmax;
+  height: 12vmax;
+  border: 1px solid var(--wave-ring);
+  border-radius: 50%;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.18);
+  animation: wave-ripple 11s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+  will-change: transform, opacity;
+}
+
+.atmosphere-wave:nth-of-type(2) {
+  animation-delay: -3.6s;
+}
+
+.atmosphere-wave:nth-of-type(3) {
+  animation-delay: -7.2s;
 }
 
 .dot-pattern {
@@ -1710,7 +1736,33 @@ td:first-child {
     transform: translate3d(0, 0, 0);
   }
   to {
-    transform: translate3d(24px, 24px, 0);
+    transform: translate3d(16px, 16px, 0);
+  }
+}
+
+@keyframes dot-breathe {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.025);
+  }
+}
+
+@keyframes wave-ripple {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.18);
+  }
+  12% {
+    opacity: 0.9;
+  }
+  72% {
+    opacity: 0.28;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(6.5);
   }
 }
 
@@ -2042,11 +2094,17 @@ td:first-child {
 
   .dot-pattern-drift,
   .dot-pattern-spark,
+  .atmosphere-dots,
+  .atmosphere-wave,
   .live-dot.is-online::after {
     animation: none !important;
   }
 
   .dot-pattern-spark {
     opacity: 0.3;
+  }
+
+  .atmosphere-wave {
+    opacity: 0;
   }
 }

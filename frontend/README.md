@@ -17,7 +17,7 @@ SCOUT MINI 远程巡检控制台。前后端分离：本目录是独立的 React
 
 ## 界面预览
 
-以下为本地模拟数据下的界面截图（用于展示视觉，不是实车联调记录）：
+以下为本地模拟数据下的界面截图（用于展示视觉，不是实车联调记录）。点阵仅出现在登录页，登录后的控制台为无点阵的纯白/纯黑背景：
 
 ![登录页](docs/screenshots/login.png)
 
@@ -49,15 +49,13 @@ SCOUT MINI 远程巡检控制台。前后端分离：本目录是独立的 React
 
 - **字体**：中文使用系统宋体（`Songti SC` / `SimSun` / `STSong`），西文使用 `Times New Roman`。字体栈为
   `'Times New Roman', 'Songti SC', STSong, SimSun, 'Noto Serif CJK SC', serif`；不加载外部字体。
-- **纯白/纯黑底 + 灰点**：浅色背景为 `#ffffff`，深色背景为 `#000000`；点阵颜色分别为
-  `rgba(0, 0, 0, 0.22)` 与 `rgba(255, 255, 255, 0.18)`。点阵不使用渐隐遮罩，固定背景铺满整个视口。
+- **登录页点阵**：只有登录页渲染点阵背景。浅色为纯白底 + `rgba(0, 0, 0, 0.18)` 灰点，深色为纯黑底 + `rgba(255, 255, 255, 0.15)` 灰点；点距收紧到 **16px**，不使用渐隐遮罩，铺满登录页视口。
+- **登录后背景**：dashboard、巡检、控制、告警、日志不再渲染点阵，保持纯白/纯黑背景，让卡片和内容更安静；顶栏与侧栏保持透明，只留 1px 发丝线。
+- **波动动画**：登录页点阵以 16px 点距缓慢漂移，并做轻微呼吸缩放；三道从中心扩散的波纹错峰循环，叠加稀疏闪烁。登录后不渲染；`prefers-reduced-motion: reduce` 下全部关闭。
 - **磨砂玻璃**：登录面板、弹窗和卡片使用半透明白/黑玻璃、细边框、柔和阴影和
-  `backdrop-filter: blur(...) saturate(...)`；顶栏与侧栏本身完全透明，只保留 1px 发丝线，
-  让点阵从页面顶部和侧边连续覆盖，不再被控件栏挡住。
-- **点阵动画**：由 Magic UI v3 的 `DotPattern` 改写而来（`src/components/DotPattern.tsx`），
-  使用 SVG `pattern` + CSS 实现缓慢漂移与稀疏闪烁，不引入 Tailwind 或 motion 依赖。
+  `backdrop-filter: blur(...) saturate(...)`。
 - **控件交互**：按钮/导航 hover 位移、卡片 hover 阴影、输入 focus 环、方向盘按住缩放并触发
-  `press-ring` 波纹；`prefers-reduced-motion: reduce` 下关闭点阵和指示灯动画。
+  `press-ring` 波纹；`prefers-reduced-motion: reduce` 下关闭点阵、波纹和指示灯动画。
 - **无图形 logo**：界面只保留文字品牌名 “SCOUT” 和页面标题，登录页没有品牌图形标记。
 - **CSP 兼容**：无内联脚本、无内联 `style` 属性、无外部 CDN，生产构建保持
   `script-src 'self'; style-src 'self'`。
@@ -118,11 +116,11 @@ src/
   control/useHoldControl.ts   React 绑定
   robot/RobotContext.tsx      1 Hz 状态轮询、命令发送
   components/                 布局、卡片、分页、Modal、状态标签
-  components/Atmosphere.tsx   点阵背景层与光晕
+  components/Atmosphere.tsx   登录页点阵、呼吸缩放与扩散波纹
   components/DotPattern.tsx   Magic UI Dot Pattern 的 CSS 动画改写
   pages/                      登录、总览、巡检、控制、告警、日志
   utils/format.ts             中文格式化
-  styles.css                  纯白/纯黑点阵玻璃主题、宋体/Times New Roman、响应式
+  styles.css                  登录页点阵 + 无点阵控制台、宋体/Times New Roman、磨砂玻璃
 deploy/                       nginx 配置、部署与自检脚本
 docs/screenshots/             界面截图（模拟数据）
 ```
@@ -147,17 +145,18 @@ npm test            # 13 项：API 7、HoldController 4、LoginPage 2
 npm run build       # Vite production build
 ```
 
-2026-10-23 视觉改版验证（本地模拟数据 + 生产构建 + 严格 CSP，不是实车）：
+2026-10-24 视觉改版验证（本地模拟数据 + 生产构建 + 严格 CSP，不是实车）：
 
 - `npm run typecheck` 通过；`npm test` 13 项全部通过；`npm run build` 成功。
 - 用本地静态服务器按生产 CSP 提供 `dist/`，以 Playwright + 模拟 API 走完登录、总览、巡检、控制、告警、日志与路线/任务弹窗：0 控制台错误、0 页面异常、0 个内联 `style` 属性。
-- 主题核验：浅色 `body` 背景为 `rgb(255,255,255)`、点阵 `rgba(0,0,0,0.22)`；深色 `body` 背景为 `rgb(0,0,0)`、点阵 `rgba(255,255,255,0.18)`；`mask-image: none`，点阵层覆盖整个视口；顶栏与侧栏计算背景为透明，点阵不再被控件栏覆盖。
+- 主题核验：登录页浅色 `body` 背景 `rgb(255,255,255)`、点阵 `rgba(0,0,0,0.18)`、点距 16px；深色 `body` 背景 `rgb(0,0,0)`、点阵 `rgba(255,255,255,0.15)`；`mask-image: none`，登录页点阵层覆盖整个视口；登录后的 dashboard `.atmosphere` 数量为 0，即不再渲染点阵。
+- 顶栏与侧栏计算背景为透明；登录页有 3 个波纹元素，`wave-ripple` 与 `dot-breathe` 动画均在运行；`prefers-reduced-motion: reduce` 下漂移、呼吸、闪烁和波纹均为 `none`。
 - 登录面板计算背景为半透明白色并带 `blur(32px) saturate(1.2)`；主卡片使用 55% 白玻璃；深色使用深色半透明玻璃。
 - 请求路径与请求体未变：`POST /api/v1/auth/login`、`GET /api/v1/robot/status`、`GET /api/v1/robot`、`GET/POST /api/v1/routes`、`GET/POST /api/v1/tasks`、`GET /api/v1/alarms`、`PATCH /api/v1/alarms/{id}/ack`、`GET /api/v1/control-logs`、`POST /api/v1/robot/control`。
 - 按住前进约 0.8 s，后端收到 5 次 `FORWARD`，松开后收到 `STOP`；退出登录再发一次 `STOP`。
 - 交互核验：方向盘 hover 位移 `translateY(-2px)` 并出现环与阴影，按住缩放 `scale(0.94)`、背景切换为按钮反色、`press-ring` 动画运行；松开恢复。
 - MONITOR 可确认告警、前进按钮禁用但 STOP 可用；VIEWER 巡检页没有新建/编辑按钮。
-- 1440、820、390、320 宽度均无横向溢出；点阵漂移动画确实在运行，`prefers-reduced-motion: reduce` 下点阵动画为 `none`。
+- 1440、820、390、320 宽度均无横向溢出。
 - 截图使用模拟数据；视觉改版后尚未重新进行真实后端/真实小车联调。
 
 改版前的全栈联调记录（API 客户端与按住控制逻辑未改，视觉层已重写）：

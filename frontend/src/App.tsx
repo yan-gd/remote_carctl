@@ -109,7 +109,7 @@ export default function App() {
 
   return (
     <div className="app-root">
-      <Atmosphere />
+      {!user && <Atmosphere />}
       {content}
     </div>
   );

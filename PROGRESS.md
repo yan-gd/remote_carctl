@@ -284,16 +284,17 @@ cd /home/agilex/Desktop/remote_carctl/robot-bridge
 - **中文用宋体，西文用 Times New Roman**。
 - **磨砂玻璃样式，整体更简约**；不要添加无用的图形 logo（例如单独的大写 “S”）。
 - 保留点状背景与动画；不要破坏前后端 API 链接。
-- 后续补充：**浅色背景纯白、点阵灰色并铺满整页**；顶部栏和侧边栏不能再用底色挡住点阵；卡片保持磨砂玻璃的透明感，并增加控件交互动画；**深色模式反过来**（纯黑背景、浅灰点阵、深色玻璃）。
+- 后续补充：**点阵只在登录页**，浅色纯白 + 灰点、深色纯黑 + 灰点，铺满登录页并更密；登录页需要波动动画；**登录后的 dashboard 等页面不要背景**；卡片保持磨砂玻璃透明感，并增加控件交互动画；深色模式反过来（纯黑背景、浅灰点阵、深色玻璃）。
 
 ### 11.2 本次实际改动
 
-- `styles.css` 重写为**纯白/纯黑 + 灰色点阵**的玻璃主题：浅色 `#ffffff`，深色 `#000000`；移除了所有绿色/薄荷色 token，也不再使用冷灰蓝背景。
+- `styles.css` 重写为**纯白/纯黑 + 登录页灰色点阵**的玻璃主题：浅色 `#ffffff`，深色 `#000000`；移除了所有绿色/薄荷色 token，也不再使用冷灰蓝背景。
 - 字体改为系统字体栈：
   `'Times New Roman', 'Songti SC', STSong, SimSun, 'Noto Serif CJK SC', serif`。
   因此中文使用宋体（Windows 为 SimSun），西文与数字使用 Times New Roman；不再使用 ZCOOL XiaoWei / Cormorant Garamond，也移除了 `public/fonts/` 下的自托管字体和 `@font-face`。
-- 点阵层铺满整个视口：`Atmosphere` 只保留 `DotPattern`，没有渐隐遮罩、没有彩色光晕；浅色点颜色 `rgba(0,0,0,0.22)`，深色 `rgba(255,255,255,0.18)`。点阵缓慢漂移 + 稀疏闪烁，`prefers-reduced-motion` 下停止。
-- **顶栏与侧栏改为完全透明**，只保留 1px 发丝边界，让点阵连续覆盖页面上方和侧边；顶部栏不再 sticky，避免透明栏与滚动内容重叠。导航选中态和侧栏状态卡仍是局部玻璃元素。
+- **点阵只在登录页渲染**：`Atmosphere` 仅在 `!user` 时挂载；dashboard、巡检、控制、告警、日志登录后不再渲染点阵，保持纯白/纯黑背景。
+- 登录页点距从 24px 收紧到 **16px**，点半径 1.1；浅色点 `rgba(0,0,0,0.18)`，深色点 `rgba(255,255,255,0.15)`，无渐隐遮罩、铺满登录页视口。在 46s 漂移和闪烁之外新增 `dot-breathe` 呼吸缩放，以及三道 11s 错峰 `wave-ripple` 扩散波纹；`prefers-reduced-motion` 下全部停止。
+- **顶栏与侧栏保持完全透明**，只保留 1px 发丝线；顶部栏不 sticky，避免透明栏与滚动内容重叠。登录后页面本身没有点阵背景，透明栏只用于保持干净的层次。导航选中态和侧栏状态卡仍是局部玻璃元素。
 - 登录面板、弹窗和卡片使用半透明白/黑玻璃、细边框、柔和阴影与 `backdrop-filter: blur(...) saturate(...)`；浅色卡片约 55% 白、深色约 10% 白，保持透明感。
 - 增加控件交互动画：按钮/导航 hover 位移与阴影、输入 focus 环、方向盘 hover 抬升、按住 `scale(0.94)` + 反色 + `press-ring` 波纹，松开恢复。
 - 移除图形品牌标（侧栏/登录页的 “S” 方块）、轨道图、装饰编号、超大 “S” 水印、霓虹色标题渐变等；侧栏和登录页只保留文字 “SCOUT”。
@@ -317,16 +318,16 @@ cd /home/agilex/Desktop/remote_carctl/robot-bridge
 - 用本地静态服务器按生产 CSP（`script-src 'self'; style-src 'self'; connect-src 'self'`）提供 `dist/`，Playwright + 模拟 API 走完登录、总览、巡检、控制、告警、日志和路线/任务弹窗：
   - 0 控制台错误、0 页面异常、0 个 `[style]` 属性；
   - 计算字体栈包含 `Times New Roman` 与宋体 fallback；
-  - 浅色 `body` 背景 `rgb(255,255,255)`、点阵 `rgba(0,0,0,0.22)`；深色 `body` 背景 `rgb(0,0,0)`、点阵 `rgba(255,255,255,0.18)`；点阵 `mask-image: none`，`.atmosphere` 尺寸等于 1440×1100 视口；
-  - 顶栏和侧栏计算背景均为 `rgba(0,0,0,0)`（透明）、`backdrop-filter: none`，点阵不再被控件栏遮挡；
+  - 浅色 `body` 背景 `rgb(255,255,255)`、登录页点阵 `rgba(0,0,0,0.18)`、点距 16px；深色 `body` 背景 `rgb(0,0,0)`、登录页点阵 `rgba(255,255,255,0.15)`；点阵 `mask-image: none`，`.atmosphere` 尺寸等于 1440×1100 视口；登录后 dashboard 的 `.atmosphere` 数量为 **0**；
+  - 登录页有 3 个 `.atmosphere-wave`；`dot-breathe` 与 `wave-ripple` 动画名称均生效；`prefers-reduced-motion: reduce` 下漂移、呼吸、闪烁、波纹全部为 `none`；
+  - 顶栏和侧栏计算背景均为 `rgba(0,0,0,0)`（透明）、`backdrop-filter: none`；登录后无点阵，登录页点阵不被控件栏遮挡；
   - 登录面板背景 `rgba(255,255,255,0.65)` + `blur(32px) saturate(1.2)`；主卡片为 55% 白玻璃；深色为半透明深色玻璃；
   - 1440 / 820 / 390 / 320 宽度均无横向溢出；
-  - 点阵漂移 transform 在两次采样中变化，动画确实运行；`prefers-reduced-motion: reduce` 下为 `none`；
   - 交互动画：方向盘 hover `translateY(-2px)`、环形阴影 4px；按住 `scale(0.94)`、背景切换为反色、`press-ring` 动画运行；
   - 请求路径与请求体未变：登录、状态轮询、路线/任务 GET+POST、告警 GET + PATCH 确认、日志 GET、控制 POST；
   - 按住前进约 0.8 s 后端收到 5 次 `FORWARD`，松开后收到 `STOP`；退出登录再发 `STOP`；
   - MONITOR 可确认告警、不能前进但可 STOP；VIEWER 巡检页无新建/编辑按钮。
-- 截图使用模拟数据；**视觉改版后尚未用真实后端/真实小车重新联调**，也尚未部署到服务器。
+- 截图使用模拟数据；**视觉改版后尚未用真实后端/真实小车重新联调**；登录页-only 的最新版本也尚未部署到服务器。
 
 ### 11.5 线上部署与验证（2026-10-24）
 
@@ -336,6 +337,8 @@ cd /home/agilex/Desktop/remote_carctl/robot-bridge
 - 未登录调用 `/api/v1/robot/status` 返回 401；响应头 CSP 仍为严格策略。
 - 用本机 Chrome（Playwright）加载公网登录页：0 控制台错误、0 页面异常、0 个内联 `style`；`body` 背景 `rgb(255,255,255)`，点阵 `rgba(0,0,0,0.22)`、无遮罩，字体栈包含 Times New Roman 与宋体，登录面板为半透明玻璃 + `blur(32px)`。
 - **尚未用真实账号登录并验证总览/控制/告警/日志**；完整 `smoke-test.sh` 仍需用户在服务器执行。
+
+> **2026-10-24 追加版（尚未部署）**：登录页-only 点阵、16px 点距、三道 `wave-ripple` + `dot-breathe`，登录后 dashboard 不再渲染点阵。本地构建为 `index-kdcNEZf2.js` / `index-BZdA0KMz.css`；线上仍是上一版 `index-CljkQ52s.js`。服务器拉取最新提交后按下方命令重新 build + rsync；验证时登录页应看到更密的点和扩散波纹，登录后背景应为无点阵的纯白/纯黑。
 
 服务器实际上由 **BT 面板的 nginx** 提供服务，不是 systemd 的 `nginx.service`：
 
@@ -374,7 +377,7 @@ sudo chown -R www:www /www/wwwroot/agilex.yoyoyan.cn
 sudo /www/server/nginx/sbin/nginx -t
 sudo /www/server/nginx/sbin/nginx -s reload
 
-# 确认线上引用的是新构建（当前为 index-CljkQ52s.js）
+# 确认线上引用的是新构建（以 dist/index.html 实际 hash 为准；本次本地为 index-kdcNEZf2.js）
 curl -s https://agilex.yoyoyan.cn/ | grep -o 'assets/index-[^"]*\.js'
 
 cd /opt/remote_carctl
