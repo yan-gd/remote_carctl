@@ -1,6 +1,6 @@
 # exp3 项目进度与 Agent 交接
 
-更新时间：2026-10-23 深夜（Asia/Shanghai）。本文记录代码状态、用户提供的现场结果和后续工作边界，供后续 Agent 接续；不是新一轮测试报告。**第 11 节记录当晚最新一次前端视觉改版，视觉约束已覆盖第 10 节的旧配色与字体描述。** 部署命令统一见 [README 的 Quick Start](README.md#3-quick-start服务器--小车端)。
+更新时间：2026-10-24 凌晨（Asia/Shanghai）。本文记录代码状态、用户提供的现场结果和后续工作边界，供后续 Agent 接续；不是新一轮测试报告。**第 11 节记录前端视觉改版与线上部署；视觉约束已覆盖第 10 节的旧配色与字体描述。** 部署命令统一见 [README 的 Quick Start](README.md#3-quick-start服务器--小车端)。
 
 ## 1. 接手时先知道这些
 
@@ -77,9 +77,9 @@
 | OpenAPI | `http://47.109.132.238:8080/v3/api-docs` |
 | 前端部署 | `/www/wwwroot/agilex.yoyoyan.cn`；BT vhost `/www/server/panel/vhost/nginx/agilex.yoyoyan.cn.conf` |
 | 公网 HTTPS | `https://agilex.yoyoyan.cn/` 返回 200；HTTP 301 跳转；HSTS/CSP 生效 |
-| 前端包 | `index-D5w0ypJS.js`（React 19 + Vite 7 生产构建） |
+| 前端包 | `index-CljkQ52s.js` + `index-Dbo7a9He.css`（2026-10-24 视觉改版，React 19 + Vite 7 生产构建）；旧包为 `index-D5w0ypJS.js` |
 | 证书 | Let's Encrypt，SAN `agilex.yoyoyan.cn`，有效期至 2027-01-21 UTC；acme.sh 计划 2026-12-22 续期 |
-| 前端验收 | `deploy/smoke-test.sh` 8/8 PASS；API 未登录 JSON 401；Swagger 404；公网登录页 Chrome 加载无控制台错误 |
+| 前端验收 | 旧构建曾 `deploy/smoke-test.sh` 8/8 PASS；2026-10-24 新构建已核对公网 200、新 bundle、API 未登录 JSON 401、CSP，Chrome 登录页无控制台错误；完整 smoke-test 与真实账号登录仍待执行 |
 
 服务 ExecStart 是 `/usr/bin/java -jar .../start-1.0-SNAPSHOT.jar`，WorkingDirectory 是 `/opt/remote_carctl/backend`。环境文件中 `PATROL_DEMO_ENABLED=false`，因为演示账号已在第一次显式初始化时写入数据库。
 
@@ -328,12 +328,34 @@ cd /home/agilex/Desktop/remote_carctl/robot-bridge
   - MONITOR 可确认告警、不能前进但可 STOP；VIEWER 巡检页无新建/编辑按钮。
 - 截图使用模拟数据；**视觉改版后尚未用真实后端/真实小车重新联调**，也尚未部署到服务器。
 
-### 11.5 部署与未完成项
+### 11.5 线上部署与验证（2026-10-24）
 
-本次没有服务器 SSH/面板权限，未执行线上发布；公网 `https://agilex.yoyoyan.cn` 仍应视为第 10 节记录的旧构建（`index-D5w0ypJS.js`），不要误报为已换新视觉。视觉改版代码已推送到 `origin/main`（提交 `49ff8b1`）。用户可执行：
+用户已在 BT 服务器 `/opt/remote_carctl/frontend` 拉取代码并构建，随后 `rsync` 到 `/www/wwwroot/agilex.yoyoyan.cn/`，`chown` 为 `www:www`。公网已验证：
+
+- `https://agilex.yoyoyan.cn/` 返回 200；HTML 引用新 bundle `assets/index-CljkQ52s.js` 和 `assets/index-Dbo7a9He.css`，JS/CSS 均 200。
+- 未登录调用 `/api/v1/robot/status` 返回 401；响应头 CSP 仍为严格策略。
+- 用本机 Chrome（Playwright）加载公网登录页：0 控制台错误、0 页面异常、0 个内联 `style`；`body` 背景 `rgb(255,255,255)`，点阵 `rgba(0,0,0,0.22)`、无遮罩，字体栈包含 Times New Roman 与宋体，登录面板为半透明玻璃 + `blur(32px)`。
+- **尚未用真实账号登录并验证总览/控制/告警/日志**；完整 `smoke-test.sh` 仍需用户在服务器执行。
+
+服务器实际上由 **BT 面板的 nginx** 提供服务，不是 systemd 的 `nginx.service`：
+
+```text
+master: /www/server/nginx/sbin/nginx -c /www/server/nginx/conf/nginx.conf
+systemctl is-active nginx -> failed
+command -v nginx -> /usr/sbin/nginx
+```
+
+因此 `sudo systemctl reload nginx` 报 “nginx.service is not active” 是正常的，**静态文件更新本来不需要 reload**。也不要为了这个错误去启动 systemd 的 nginx 单元，可能与 BT nginx 抢占 80/443。若要验证/重载 BT nginx，使用其自己的二进制：
 
 ```bash
-# 服务器上的仓库路径按实际 clone 位置调整（例如 /opt/remote_carctl）
+sudo /www/server/nginx/sbin/nginx -t
+sudo /www/server/nginx/sbin/nginx -s reload
+# 或 /etc/init.d/nginx reload
+```
+
+后续部署命令（服务器上）：
+
+```bash
 cd /opt/remote_carctl
 git pull --ff-only
 
@@ -343,14 +365,16 @@ npm run typecheck
 npm test
 npm run build
 
-# 服务器上的前端站点目录（BT 面板实际路径）
 # 保护 .well-known（证书续期）和 BT 的 .user.ini
 sudo rsync -a --delete --exclude='.well-known' --exclude='.user.ini' \
   dist/ /www/wwwroot/agilex.yoyoyan.cn/
 sudo chown -R www:www /www/wwwroot/agilex.yoyoyan.cn
-sudo nginx -t && sudo systemctl reload nginx
 
-# 确认线上引用的是新构建（本地构建文件名示例：index-CljkQ52s.js）
+# 静态文件无需 reload；确需清缓存/验证配置时：
+sudo /www/server/nginx/sbin/nginx -t
+sudo /www/server/nginx/sbin/nginx -s reload
+
+# 确认线上引用的是新构建（当前为 index-CljkQ52s.js）
 curl -s https://agilex.yoyoyan.cn/ | grep -o 'assets/index-[^"]*\.js'
 
 cd /opt/remote_carctl
