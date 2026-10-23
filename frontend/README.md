@@ -49,9 +49,9 @@ SCOUT MINI 远程巡检控制台。前后端分离：本目录是独立的 React
 
 - **字体**：中文使用系统宋体（`Songti SC` / `SimSun` / `STSong`），西文使用 `Times New Roman`。字体栈为
   `'Times New Roman', 'Songti SC', STSong, SimSun, 'Noto Serif CJK SC', serif`；不加载外部字体。
-- **登录页点阵**：只有登录页渲染点阵背景。浅色为纯白底 + `rgba(0, 0, 0, 0.18)` 灰点，深色为纯黑底 + `rgba(255, 255, 255, 0.15)` 灰点；点距收紧到 **16px**，不使用渐隐遮罩，铺满登录页视口。
+- **登录页点阵**：只有登录页渲染点阵背景。浅色为纯白底 + `rgba(0, 0, 0, 0.18)` 灰点，深色为纯黑底 + `rgba(255, 255, 255, 0.15)` 灰点；点距收紧到 **16px**，铺满登录页视口。另有一层 100px 周期的亮暗 mask 形成流动光带，最小仍保留 48% 点可见，不是渐隐。
 - **登录后背景**：dashboard、巡检、控制、告警、日志不再渲染点阵，保持纯白/纯黑背景，让卡片和内容更安静；顶栏与侧栏保持透明，只留 1px 发丝线。
-- **波动动画**：登录页点阵以 16px 点距缓慢漂移，并做轻微呼吸缩放；三道从中心扩散的波纹错峰循环，叠加稀疏闪烁。登录后不渲染；`prefers-reduced-motion: reduce` 下全部关闭。
+- **波动动画**：登录页点阵本体以 12s 回环横向/纵向漂移（约 18px × 7px），叠加 9s 横向亮暗光带、14s 呼吸缩放和 3 道 11s 错峰扩散波纹；另有稀疏闪烁。登录后不渲染；`prefers-reduced-motion: reduce` 下全部关闭并移除亮暗 mask。
 - **磨砂玻璃**：登录面板、弹窗和卡片使用半透明白/黑玻璃、细边框、柔和阴影和
   `backdrop-filter: blur(...) saturate(...)`。
 - **控件交互**：按钮/导航 hover 位移、卡片 hover 阴影、输入 focus 环、方向盘按住缩放并触发
@@ -149,8 +149,8 @@ npm run build       # Vite production build
 
 - `npm run typecheck` 通过；`npm test` 13 项全部通过；`npm run build` 成功。
 - 用本地静态服务器按生产 CSP 提供 `dist/`，以 Playwright + 模拟 API 走完登录、总览、巡检、控制、告警、日志与路线/任务弹窗：0 控制台错误、0 页面异常、0 个内联 `style` 属性。
-- 主题核验：登录页浅色 `body` 背景 `rgb(255,255,255)`、点阵 `rgba(0,0,0,0.18)`、点距 16px；深色 `body` 背景 `rgb(0,0,0)`、点阵 `rgba(255,255,255,0.15)`；`mask-image: none`，登录页点阵层覆盖整个视口；登录后的 dashboard `.atmosphere` 数量为 0，即不再渲染点阵。
-- 顶栏与侧栏计算背景为透明；登录页有 3 个波纹元素，`wave-ripple` 与 `dot-breathe` 动画均在运行；`prefers-reduced-motion: reduce` 下漂移、呼吸、闪烁和波纹均为 `none`。
+- 主题核验：登录页浅色 `body` 背景 `rgb(255,255,255)`、点阵 `rgba(0,0,0,0.18)`、点距 16px；深色 `body` 背景 `rgb(0,0,0)`、点阵 `rgba(255,255,255,0.15)`；点阵计算动画为 `dot-breathe, dot-shimmer`，mask 为周期性亮暗带（非渐隐）；登录后的 dashboard `.atmosphere` 数量为 0，即不再渲染点阵。
+- 顶栏与侧栏计算背景为透明；登录页有 3 个波纹元素，`wave-ripple`、`dot-breathe`、`dot-shimmer` 与点阵本体 `dot-wave` 均在运行；0.9s 采样期间点阵 transform 从约 `(1.08,-0.84)` 移到 `(5.14,-4.00)`；`prefers-reduced-motion: reduce` 下漂移、呼吸、闪烁和波纹均为 `none`，mask 被移除。
 - 登录面板计算背景为半透明白色并带 `blur(32px) saturate(1.2)`；主卡片使用 55% 白玻璃；深色使用深色半透明玻璃。
 - 请求路径与请求体未变：`POST /api/v1/auth/login`、`GET /api/v1/robot/status`、`GET /api/v1/robot`、`GET/POST /api/v1/routes`、`GET/POST /api/v1/tasks`、`GET /api/v1/alarms`、`PATCH /api/v1/alarms/{id}/ack`、`GET /api/v1/control-logs`、`POST /api/v1/robot/control`。
 - 按住前进约 0.8 s，后端收到 5 次 `FORWARD`，松开后收到 `STOP`；退出登录再发一次 `STOP`。

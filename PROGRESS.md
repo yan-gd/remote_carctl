@@ -293,7 +293,7 @@ cd /home/agilex/Desktop/remote_carctl/robot-bridge
   `'Times New Roman', 'Songti SC', STSong, SimSun, 'Noto Serif CJK SC', serif`。
   因此中文使用宋体（Windows 为 SimSun），西文与数字使用 Times New Roman；不再使用 ZCOOL XiaoWei / Cormorant Garamond，也移除了 `public/fonts/` 下的自托管字体和 `@font-face`。
 - **点阵只在登录页渲染**：`Atmosphere` 仅在 `!user` 时挂载；dashboard、巡检、控制、告警、日志登录后不再渲染点阵，保持纯白/纯黑背景。
-- 登录页点距从 24px 收紧到 **16px**，点半径 1.1；浅色点 `rgba(0,0,0,0.18)`，深色点 `rgba(255,255,255,0.15)`，无渐隐遮罩、铺满登录页视口。在 46s 漂移和闪烁之外新增 `dot-breathe` 呼吸缩放，以及三道 11s 错峰 `wave-ripple` 扩散波纹；`prefers-reduced-motion` 下全部停止。
+- 登录页点距从 24px 收紧到 **16px**，点半径 1.1；浅色点 `rgba(0,0,0,0.18)`，深色点 `rgba(255,255,255,0.15)`，点阵铺满登录页视口。点阵本体使用 12s `dot-wave` 回环漂移（约 18px × 7px），叠加 9s `dot-shimmer` 横向亮暗光带、14s `dot-breathe` 呼吸缩放、三道 11s 错峰 `wave-ripple` 扩散波纹和稀疏闪烁；`prefers-reduced-motion` 下停止并移除亮暗 mask。
 - **顶栏与侧栏保持完全透明**，只保留 1px 发丝线；顶部栏不 sticky，避免透明栏与滚动内容重叠。登录后页面本身没有点阵背景，透明栏只用于保持干净的层次。导航选中态和侧栏状态卡仍是局部玻璃元素。
 - 登录面板、弹窗和卡片使用半透明白/黑玻璃、细边框、柔和阴影与 `backdrop-filter: blur(...) saturate(...)`；浅色卡片约 55% 白、深色约 10% 白，保持透明感。
 - 增加控件交互动画：按钮/导航 hover 位移与阴影、输入 focus 环、方向盘 hover 抬升、按住 `scale(0.94)` + 反色 + `press-ring` 波纹，松开恢复。
@@ -318,8 +318,8 @@ cd /home/agilex/Desktop/remote_carctl/robot-bridge
 - 用本地静态服务器按生产 CSP（`script-src 'self'; style-src 'self'; connect-src 'self'`）提供 `dist/`，Playwright + 模拟 API 走完登录、总览、巡检、控制、告警、日志和路线/任务弹窗：
   - 0 控制台错误、0 页面异常、0 个 `[style]` 属性；
   - 计算字体栈包含 `Times New Roman` 与宋体 fallback；
-  - 浅色 `body` 背景 `rgb(255,255,255)`、登录页点阵 `rgba(0,0,0,0.18)`、点距 16px；深色 `body` 背景 `rgb(0,0,0)`、登录页点阵 `rgba(255,255,255,0.15)`；点阵 `mask-image: none`，`.atmosphere` 尺寸等于 1440×1100 视口；登录后 dashboard 的 `.atmosphere` 数量为 **0**；
-  - 登录页有 3 个 `.atmosphere-wave`；`dot-breathe` 与 `wave-ripple` 动画名称均生效；`prefers-reduced-motion: reduce` 下漂移、呼吸、闪烁、波纹全部为 `none`；
+  - 浅色 `body` 背景 `rgb(255,255,255)`、登录页点阵 `rgba(0,0,0,0.18)`、点距 16px；深色 `body` 背景 `rgb(0,0,0)`、登录页点阵 `rgba(255,255,255,0.15)`；点阵计算动画为 `dot-breathe, dot-shimmer`，mask 为 100px 周期亮暗带（不是渐隐）；`.atmosphere` 尺寸等于 1440×1100 视口；登录后 dashboard 的 `.atmosphere` 数量为 **0**；
+  - 登录页有 3 个 `.atmosphere-wave`；`dot-wave`、`dot-breathe`、`dot-shimmer`、`wave-ripple` 动画名称均生效；0.9s 采样期间点阵 transform 从约 `(1.08,-0.84)` 移到 `(5.14,-4.00)`；`prefers-reduced-motion: reduce` 下全部为 `none`，mask 被移除；
   - 顶栏和侧栏计算背景均为 `rgba(0,0,0,0)`（透明）、`backdrop-filter: none`；登录后无点阵，登录页点阵不被控件栏遮挡；
   - 登录面板背景 `rgba(255,255,255,0.65)` + `blur(32px) saturate(1.2)`；主卡片为 55% 白玻璃；深色为半透明深色玻璃；
   - 1440 / 820 / 390 / 320 宽度均无横向溢出；
@@ -338,7 +338,7 @@ cd /home/agilex/Desktop/remote_carctl/robot-bridge
 - 用本机 Chrome（Playwright）加载公网登录页：0 控制台错误、0 页面异常、0 个内联 `style`；`body` 背景 `rgb(255,255,255)`，点阵 `rgba(0,0,0,0.22)`、无遮罩，字体栈包含 Times New Roman 与宋体，登录面板为半透明玻璃 + `blur(32px)`。
 - **尚未用真实账号登录并验证总览/控制/告警/日志**；完整 `smoke-test.sh` 仍需用户在服务器执行。
 
-> **2026-10-24 追加版（已推送 `a9c77e7`，尚未部署）**：登录页-only 点阵、16px 点距、三道 `wave-ripple` + `dot-breathe`，登录后 dashboard 不再渲染点阵。本地构建为 `index-kdcNEZf2.js` / `index-BZdA0KMz.css`；线上仍是上一版 `index-CljkQ52s.js`。服务器拉取 `a9c77e7` 后按下方命令重新 build + rsync；验证时登录页应看到更密的点和扩散波纹，登录后背景应为无点阵的纯白/纯黑。
+> **2026-10-24 追加版（已推送 `a9c77e7` 的登录页-only 版本；点阵波动增强待提交/部署）**：登录页-only 点阵、16px 点距、三道 `wave-ripple` + `dot-breathe`，登录后 dashboard 不再渲染点阵。最新增强加入 12s 点阵本体 `dot-wave` 漂移和 9s `dot-shimmer` 亮暗光带，本地构建为 `index-B6c2Iswy.js` / `index-CfqVvINQ.css`；线上仍是上一版 `index-CljkQ52s.js`。服务器拉取最新提交后按下方命令重新 build + rsync；验证时登录页应看到点阵本体缓慢波动，登录后背景应为无点阵的纯白/纯黑。
 
 服务器实际上由 **BT 面板的 nginx** 提供服务，不是 systemd 的 `nginx.service`：
 
@@ -377,7 +377,7 @@ sudo chown -R www:www /www/wwwroot/agilex.yoyoyan.cn
 sudo /www/server/nginx/sbin/nginx -t
 sudo /www/server/nginx/sbin/nginx -s reload
 
-# 确认线上引用的是新构建（以 dist/index.html 实际 hash 为准；本次本地为 index-kdcNEZf2.js）
+# 确认线上引用的是新构建（以 dist/index.html 实际 hash 为准；本次本地为 index-B6c2Iswy.js）
 curl -s https://agilex.yoyoyan.cn/ | grep -o 'assets/index-[^"]*\.js'
 
 cd /opt/remote_carctl
