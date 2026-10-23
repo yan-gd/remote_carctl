@@ -1,0 +1,5 @@
+# Local verification output (e2e reports, process logs) and Python caches
+verification/
+__pycache__/
+*.pyc
+.venv/

@@ -1,0 +1,38 @@
+target/
+
+### eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+
+### NetBeans ###
+nbproject/private/
+build/
+nbbuild/
+dist/
+nbdist/
+bin/
+doc/
+.DS_Store
+
+# Local database, generated credentials, verification outputs
+/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.log
+/verification/
+
+*.jwt-key
+__pycache__/
