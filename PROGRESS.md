@@ -1,13 +1,13 @@
 # exp3 项目进度与 Agent 交接
 
-更新时间：2026-10-23。本文记录代码状态、用户提供的现场结果和后续工作边界，供后续 Agent 接续；不是新一轮测试报告。部署命令统一见 [README 的 Quick Start](README.md#3-quick-start服务器--小车端)。
+更新时间：2026-10-23 晚（Asia/Shanghai）。本文记录代码状态、用户提供的现场结果和后续工作边界，供后续 Agent 接续；不是新一轮测试报告。部署命令统一见 [README 的 Quick Start](README.md#3-quick-start服务器--小车端)。
 
 ## 1. 接手时先知道这些
 
 - 当前工作是 **exp3 的服务器与真实小车部署联调**，不是重新实现 exp2。后端业务、MQTT 与 ROS 桥接代码已存在，不要重建脚手架。
-- 2026-10-23 新增目标：开发 **React 19 + TypeScript + Vite 7 前端**（`frontend/`），前后端分离并部署到 `agilex.yoyoyan.cn`。登录、总览、巡检（路线/任务）、按住控制、告警、日志已完成并通过本地全栈联调；**尚未部署到云服务器**（SSH 公钥登录被拒，DNS 已解析、80 端口仍为主机面板默认页，服务器操作需用户执行）。本轮同时给后端增加了可配置 CORS 白名单（开发端口 + 生产公网源），并在真实 nginx 上完成了 HTTPS 反向代理联调。
+- 2026-10-23 新增目标：开发 **React 19 + TypeScript + Vite 7 前端**（`frontend/`），前后端分离并部署到 `agilex.yoyoyan.cn`。登录、总览、巡检（路线/任务）、按住控制、告警、日志已完成并通过本地全栈联调；**2026-10-23 晚间已部署到云服务器**（BT 面板，站点目录 `/www/wwwroot/agilex.yoyoyan.cn`，acme.sh 签发 Let's Encrypt 证书）。公网 HTTPS、HSTS/CSP、API 401、Swagger 404 和 smoke test 已验证；真实账号登录与机器人控制仍待浏览器验收。
 - 已确认：服务器后端和 Broker 运行、Swagger 公网可访问；小车底盘真实遥测、MQTT 心跳、后端状态查询和 STOP 回执已打通。
-- 用户最新要求是将部署经验写入 README，再新增本交接文档。README 已提交并推送；本文是此后新增的文件，其提交/推送状态应以实际 `git status` 为准。
+- 用户随后要求将前端从 Flutter 切换为 **React 19 + TypeScript + Vite 7**。React 版本已提交并推送（`11e7db2`、`861f88f`）；Flutter 版本仍保留在 Git 历史 `595af1d`，工作区已不包含 Flutter。
 - 小车桥接的 systemd 安装命令已提供并写入 README，但尚未收到安装后 `systemctl status`、日志或重启验收输出，**不能将无人值守开机恢复记为已验证**。
 - **尚无完整的真实运动、真实断网停车耗时和整机重启恢复测量记录。** STOP 的 HTTP 成功、桥接 APPLIED 回执不等于物理运动测试完成。
 - 本地工作环境是 Windows PowerShell；服务器和小车由用户在终端执行命令并反馈，本轮 Agent 没有直接 SSH 操作两台设备。
@@ -19,8 +19,8 @@
 | 本地 exp3 独立 Git 仓库 | `E:\qq157\Desktop\class\software\exp3` |
 | 远程 | [yan-gd/remote_carctl](https://github.com/yan-gd/remote_carctl) |
 | 分支 | `main` |
-| 最近一次已推送提交 | `595af1d` — `feat(frontend): add Flutter web console and nginx deployment`（`e846647` 之后） |
-| 当前工作区 | `595af1d` 之后已将前端从 Flutter 整体替换为 React 19 + TypeScript + Vite 7，并更新巡检页、部署配置与文档；这些改动尚未提交/推送，以实际 `git status` 为准 |
+| 最近一次已推送提交 | `861f88f` — `chore(frontend): update test dependencies for audit fixes`；前一条为 `11e7db2 feat(frontend): replace Flutter with React 19 + Vite 7` |
+| 当前工作区 | 截至代码提交 `861f88f`；本次 `PROGRESS.md` 部署记录随文档提交，具体以 `git log` / `git status` 为准 |
 | 服务器 / 小车完整操作命令 | [README.md 第 3 节](README.md#3-quick-start服务器--小车端) |
 | 前端代码与开发说明 | [frontend/README.md](frontend/README.md) |
 | 前端部署（nginx/HTTPS/限流） | [frontend/deploy/README.md](frontend/deploy/README.md) |
@@ -55,7 +55,7 @@
 - 命令只有 `FORWARD`、`BACKWARD`、`LEFT`、`RIGHT`、`STOP`，区分大小写。
 - MQTT 不可用返回 503；运动命令要求机器人在线，否则 409；STOP 不受在线检查限制，但仍要求 MQTT 可用。
 - 后端发布返回 `accepted=true` 代表 Broker 发布确认；`lastAck` 是桥接回执，不是设备物理执行证明。
-- 路线和任务仍是数据管理，不会执行自主巡逻。没有实现导航、SLAM、视频、WebSocket、前端、任务下发调度。
+- 路线和任务仍是数据管理，不会执行自主巡逻。没有实现导航、SLAM、视频、WebSocket、任务下发调度；前端已完成并通过公网部署。
 
 ## 4. 服务器现场状态
 
@@ -75,6 +75,11 @@
 | 后端 MQTT | `tcp://127.0.0.1:1883`，用户名 `robot`，robot ID `SCOUT-001` |
 | Swagger | [http://47.109.132.238:8080/swagger-ui.html](http://47.109.132.238:8080/swagger-ui.html) |
 | OpenAPI | `http://47.109.132.238:8080/v3/api-docs` |
+| 前端部署 | `/www/wwwroot/agilex.yoyoyan.cn`；BT vhost `/www/server/panel/vhost/nginx/agilex.yoyoyan.cn.conf` |
+| 公网 HTTPS | `https://agilex.yoyoyan.cn/` 返回 200；HTTP 301 跳转；HSTS/CSP 生效 |
+| 前端包 | `index-D5w0ypJS.js`（React 19 + Vite 7 生产构建） |
+| 证书 | Let's Encrypt，SAN `agilex.yoyoyan.cn`，有效期至 2027-01-21 UTC；acme.sh 计划 2026-12-22 续期 |
+| 前端验收 | `deploy/smoke-test.sh` 8/8 PASS；API 未登录 JSON 401；Swagger 404；公网登录页 Chrome 加载无控制台错误 |
 
 服务 ExecStart 是 `/usr/bin/java -jar .../start-1.0-SNAPSHOT.jar`，WorkingDirectory 是 `/opt/remote_carctl/backend`。环境文件中 `PATROL_DEMO_ENABLED=false`，因为演示账号已在第一次显式初始化时写入数据库。
 
@@ -168,7 +173,7 @@ cd /home/agilex/Desktop/remote_carctl/robot-bridge
 | 后端进程重启持久化 | 历史报告 PASS，20 个操作 |
 | 本轮现场构建 | 用户提供服务器 `mvn clean install` 的 BUILD SUCCESS，不据此推断完整测试数量或 Broker 测试是否执行 |
 | README 文档检查 | 新增的 17 段 Bash 代码通过 `bash -n`，代码块和相对链接已检查；未执行其中远程安装命令 |
-| 前端部署配置检查 | `nginx-tls.conf` 在本机 nginx 1.28.0 `nginx -t` 通过；HTTPS（自签证书）下完成控制/角色与巡检页 E2E；CSP/HSTS/反代/Swagger 404/301 已实测；`deploy/smoke-test.sh` 对本机 nginx HTTPS 的 8 项检查全部 PASS。**尚未在目标服务器执行**。 |
+| 前端部署验证（目标服务器） | BT nginx `nginx -t` 通过；公网 HTTP 301、HTTPS 200、React bundle `index-D5w0ypJS.js`；HSTS/CSP、API JSON 401、Swagger 404；`smoke-test.sh` 8/8 PASS；Chrome 公网登录页加载无控制台错误。 |
 
 `docs/TEST-REPORT.md` 中“未实车测试”是原自动化测试阶段的记录，不能用它否定后续现场已取得的心跳/STOP 证据，也不能把模拟测试的停车耗时套用到实车。
 
@@ -176,13 +181,13 @@ cd /home/agilex/Desktop/remote_carctl/robot-bridge
 
 ## 8. 后续建议顺序（尚未全部完成）
 
-1. **部署前端到云服务器**：DNS 已解析；服务器按 [frontend/deploy/README.md](frontend/deploy/README.md) 部署到 `/var/www/agilex`、把后端 `BIND_ADDRESS` 改为 `127.0.0.1`、配置 nginx/面板反代并用 Let's Encrypt 申请证书。当前 SSH 公钥登录被拒，需用户执行或提供可用凭据。若服务器 `ls` 只有 `backend`，先执行 `git sparse-checkout disable`（本机 2026-10-23 已确认服务器启用了只检出 `backend` 的稀疏检出）。
-2. **验收 HTTPS 与安全配置**：HTTP→HTTPS 301、HSTS/CSP、未登录 API 返回 JSON 401、登录限流 429、Swagger 404；浏览器完整走一遍登录、总览、巡检、控制、告警、日志。
+1. **公网功能验收**：浏览器用 OPERATOR 登录，完整走登录、总览、巡检、控制、告警、日志；确认机器人 online/chassisConnected 和 STOP 回执。登录 403 时检查 `PATROL_WEB_ALLOWED_ORIGINS`；页面正常但离线时检查后端 MQTT/桥接。
+2. **收紧后端暴露**：确认 `BIND_ADDRESS=127.0.0.1`、8080 未对公网开放；当前记录曾为 `0.0.0.0:8080`，需要在服务器核实并收紧。HTTPS 跳转/HSTS/CSP/API 401/Swagger 404 已通过。
 3. **确认桥接服务安装结果**：小车 `systemctl status scout-mqtt-bridge --no-pager -l`、`journalctl -u scout-mqtt-bridge -n 50 --no-pager`，后端再查 online/chassisConnected 和 STOP 对应 seq 回执。
 4. **明确开机依赖**：若用户要求整机无人值守恢复，再为 CAN 和实际底盘驱动设计服务与依赖关系；这部分当前没有实现，不应声称桥接自启已覆盖它们。
 5. **验证真实短时运动**：先核实控制模式、急停、订阅关系，架空车轮、降低配置速度，使用每 200 ms 续发且 finally 发送 STOP 的 CLI。记录方向、速度、回执和物理结果。前端控制按钮也应参与一次实车按住测试。
 6. **验证真实停止与恢复**：在可控条件下测量停止续发、网络断开、服务停止、服务重启的表现；系统重启验证需用户现场配合，不擅自重启设备。记录实测时间，勿复用模拟报告数字。
-7. **前端后续优化**：移动端专门布局、WebSocket 实时推送、任务下发/导航不在本阶段；当前巡检页只维护计划数据。服务端构建需要 Node 20.19+ / 22.12+ 与 `/var/www/agilex` 部署目录。
+7. **前端后续优化**：移动端专门布局、WebSocket 实时推送、任务下发/导航不在本阶段；当前巡检页只维护计划数据。服务端构建需要 Node 20.19+ / 22.12+；本机实际部署目录为 `/www/wwwroot/agilex.yoyoyan.cn`。
 8. **文档收尾**：将新的现场证据追加到本文，必要时更新旧 DEPLOYMENT 文档的过时示例。低电压阈值仍需现场确认，当前默认关闭。
 
 可选的小范围代码修复：MQTT 凭据类型校验、通用脚本兼容本机启动环境。只有用户后续要求相关改动时再开展，不借交接扩大范围；修复应包含有效异常断言。
@@ -197,7 +202,7 @@ cd /home/agilex/Desktop/remote_carctl/robot-bridge
 - 前端改动至少执行 `npm run typecheck` 与 `npm test`；发版构建使用 `npm run build`，产物 `frontend/dist/` 不提交。
 - 前端安全边界：JWT 只在内存、生产必须 HTTPS、生产构建不要传 `API_BASE_URL`、`PATROL_WEB_ALLOWED_ORIGINS` 必须显式包含 `https://agilex.yoyoyan.cn`；不要在代码或文档里放真实密码。
 - Push 前检查差异、分支和远程。上次代理故障的单次解决命令是 `git -c http.proxy= -c http.https://github.com.proxy= push origin main`；仅在用户授权推送时执行，不修改全局 Git 设置。
-- 本文创建这一轮没有执行远程服务安装、设备重启或云服务器部署。下一位 Agent 先检查最新仓库和现场状态，再继续。
+- 2026-10-23 晚已由用户在 BT 服务器完成前端部署、acme.sh 证书申请和 nginx 配置；Agent 通过公网 smoke test、HTML/JS bundle、HSTS/CSP、API 401 和 Chrome 登录页加载进行了验证。下一位 Agent 先检查最新仓库和现场状态，再继续。
 
 ## 10. 前端开发与本地联调（2026-10-23，React 版）
 
@@ -226,7 +231,8 @@ cd /home/agilex/Desktop/remote_carctl/robot-bridge
 - 巡检结果：路线创建/编辑/删除；任务创建/编辑为 PLANNED；被任务引用的路线删除返回 409；观察员无“新建路线”入口。
 - **真实 nginx 验证**：严格 CSP（`script-src 'self'; style-src 'self'; connect-src 'self'`）下页面正常加载、API 同源请求成功，无 CSP 控制台错误；HSTS/CSP/反代/Swagger 404/HTTP 301 已实测。
 - 过程中修复：`fetch` 作为对象方法调用触发 Chrome `Illegal invocation`，改为 `fetchImpl.call(globalThis, ...)` 后登录/轮询恢复正常；按住控制的 STOP 顺序与串行化有单元测试覆盖。
-- 该联调**没有使用真车**，也**没有在目标服务器**上执行；不能替代实车运动、断网停车与云端部署验收。
+- **目标服务器生产验证（2026-10-23 晚）**：`https://agilex.yoyoyan.cn/` 返回 200，加载 React bundle `index-D5w0ypJS.js`；HTTP 301、HSTS/CSP、API 未登录 JSON 401、Swagger 404；`smoke-test.sh` 8/8 PASS；Chrome 公网登录页无 CSP/JS 控制台错误。真实账号登录和机器人控制尚未验证。
+- 本地 E2E **没有使用真车**；不能替代实车运动、断网停车测试。
 
 ### 10.3 安全设计
 
@@ -238,23 +244,32 @@ cd /home/agilex/Desktop/remote_carctl/robot-bridge
 - **CORS 必须显式列出生产源**：`PATROL_WEB_ALLOWED_ORIGINS` 未包含 `https://agilex.yoyoyan.cn` 时登录返回 403。已启用 `server.forward-headers-strategy=framework` 并透传 `Host`/`X-Forwarded-*`。
 - 后端生产建议只监听 `127.0.0.1:8080`，公网只开 80/443；云安全组与 UFW 都要同步。
 
-### 10.4 未完成与边界
+### 10.4 云端部署结果（2026-10-23 晚）
 
-- **没有部署到云服务器**：本机 SSH 到 `root@47.109.132.238` 返回 `Permission denied (publickey,password)`，需要用户执行或提供可用凭据。2026-10-23 实测：`agilex.yoyoyan.cn` 已解析到该服务器；`http://` 仍返回主机面板默认页，`https://` 尚无可用证书。
-- 若服务器使用宝塔/BT 面板，按 [frontend/deploy/README.md](frontend/deploy/README.md) 第 6 节在面板添加站点，不要直接覆盖系统 nginx 配置。
-- nginx 配置已在本机 nginx 1.28.0 通过 `nginx -t` 并用自签证书完成 HTTPS + E2E；**尚未在目标服务器执行**，证书路径/面板差异仍需现场确认。
+- 服务器使用 BT 面板；前端实际部署目录为 **`/www/wwwroot/agilex.yoyoyan.cn`**，不是文档默认的 `/var/www/agilex`。
+- BT vhost：`/www/server/panel/vhost/nginx/agilex.yoyoyan.cn.conf`；安全头：`/www/server/panel/vhost/nginx/agilex-security-headers.inc`。
+- 证书：`acme.sh` 申请 Let's Encrypt，SAN 仅 `agilex.yoyoyan.cn`；证书 `notAfter 2027-01-21 12:05:55 UTC`；`acme.sh --list` 显示计划 `2026-12-22T21:44:29Z` 续期，cron 为 `2,8,14,20` 点。
+- 公网验证：HTTP `301` → HTTPS；HTTPS `200`；页面引用 `/assets/index-D5w0ypJS.js`；HSTS/CSP 生效；API 未登录 JSON `401`；Swagger `404`；`deploy/smoke-test.sh` **8/8 PASS**。
+- 用 Chrome 从公网加载登录页，标题/表单正常，无 CSP 或 JS 控制台错误。
+- `nginx -t` 仅有 `listen ... http2` 的弃用 warning，不影响运行。
+- 没有安装 certbot；使用 `acme.sh`。不要再用 `xiaoyou.yoyoyan.cn`、`media.yoyoyan.cn` 或 `0.default` 的证书，它们不覆盖 `agilex.yoyoyan.cn`。
+
+### 10.5 未完成与边界
+
+- **尚未用真实账号登录公网页面**，因此登录 POST、总览/巡检/控制/告警/日志的云端功能仍待浏览器验收。登录 403 时检查 `PATROL_WEB_ALLOWED_ORIGINS=https://agilex.yoyoyan.cn`。
+- **后端 8080 的绑定仍需核实**：交接表中记录过 `BIND_ADDRESS=0.0.0.0`。建议改为 `127.0.0.1` 并重启，公网只留 80/443；云安全组和 UFW 同步收紧。
+- 直接写 BT vhost 后，站点在面板中可能不显示；**不要在面板里对该站点点保存/SSL 覆盖配置**，否则可能覆盖证书路径或反代。
 - 巡检页只维护路线/任务数据，没有任务下发、导航/SLAM、执行状态或视频。
 - 未做 React 实车联调、真实断网停车耗时、专门移动端布局和浏览器兼容矩阵（仅 Chrome）。
 - 构建产物 `frontend/dist/` 被 `.gitignore` 排除，不提交。
 
-### 10.5 部署准备状态
+### 10.6 部署文件与复现
 
-- [frontend/deploy/README.md](frontend/deploy/README.md)：本地构建上传、服务器构建、nginx、证书、验收、更新/回滚、安全检查清单。
-- 部署目录固定为 **`/var/www/agilex`**（不用源码目录作为 nginx root）。
-- [frontend/deploy/nginx-http.conf](frontend/deploy/nginx-http.conf)、[nginx-tls.conf](frontend/deploy/nginx-tls.conf)、[security-headers.conf](frontend/deploy/security-headers.conf) 已适配 Vite `dist/` 与严格 CSP。
-- [frontend/README.md](frontend/README.md)：开发、构建、设计说明。
-- 本机构建产物在 `frontend/dist/`；可执行 `npm run build` 后上传，或使用 `deploy/build-and-deploy.sh` 在服务器构建（需要 Node）。
-- 部署后用 `deploy/smoke-test.sh` 检查跳转、CSP/HSTS、API 401 与 Swagger 404；本机 nginx 上 8/8 PASS。
-- 生产 `backend.env` 需包含 `PATROL_WEB_ALLOWED_ORIGINS=https://agilex.yoyoyan.cn`，否则浏览器登录 403。
+- [frontend/README.md](frontend/README.md)：开发、构建、安全说明。
+- [frontend/deploy/README.md](frontend/deploy/README.md)：系统 nginx/面板部署、证书、验收、回滚和安全清单。注意本机实际使用 BT + `/www/wwwroot/agilex.yoyoyan.cn`，与文档默认 `/var/www/agilex` 不同；以服务器实际路径为准。
+- 构建：`cd frontend && npm ci && npm run build`，产物 `dist/`。
+- 静态发布：`sudo rsync -a --delete dist/ /www/wwwroot/agilex.yoyoyan.cn/`，再 `chown -R www:www`。
+- 证书续期：`/root/.acme.sh/acme.sh --list`；不要用 certbot。
+- 部署后自检：`bash frontend/deploy/smoke-test.sh agilex.yoyoyan.cn`。
 
-下一位 Agent 应从“用户是否已完成服务器站点/证书配置、是否有可用 SSH 权限”开始确认，再继续第 8 节第 1–2 步。
+下一位 Agent 应先确认公网登录/控制是否已由用户验收，再继续第 8 节第 1–6 步；不要把“页面可打开”当成“真实控制已验收”。
