@@ -19,8 +19,8 @@
 | 本地 exp3 独立 Git 仓库 | `E:\qq157\Desktop\class\software\exp3` |
 | 远程 | [yan-gd/remote_carctl](https://github.com/yan-gd/remote_carctl) |
 | 分支 | `main` |
-| 最近一次已推送提交 | `861f88f` — `chore(frontend): update test dependencies for audit fixes`；前一条为 `11e7db2 feat(frontend): replace Flutter with React 19 + Vite 7` |
-| 当前工作区 | 截至代码提交 `861f88f`；本次 `PROGRESS.md` 部署记录随文档提交，具体以 `git log` / `git status` 为准 |
+| 最近一次功能提交（已推送） | `49ff8b1` — `feat(frontend): restyle console with dot background and frosted glass`（视觉改版）；前一条为 `4a48a79 docs: record production React frontend deployment` |
+| 当前工作区 | 截至代码提交 `49ff8b1`；本次文档更新随后提交，具体以 `git log` / `git status` 为准 |
 | 服务器 / 小车完整操作命令 | [README.md 第 3 节](README.md#3-quick-start服务器--小车端) |
 | 前端代码与开发说明 | [frontend/README.md](frontend/README.md) |
 | 前端部署（nginx/HTTPS/限流） | [frontend/deploy/README.md](frontend/deploy/README.md) |
@@ -330,11 +330,14 @@ cd /home/agilex/Desktop/remote_carctl/robot-bridge
 
 ### 11.5 部署与未完成项
 
-本次没有服务器 SSH/面板权限，未执行线上发布；公网 `https://agilex.yoyoyan.cn` 仍应视为第 10 节记录的旧构建（`index-D5w0ypJS.js`），不要误报为已换新视觉。用户可执行：
+本次没有服务器 SSH/面板权限，未执行线上发布；公网 `https://agilex.yoyoyan.cn` 仍应视为第 10 节记录的旧构建（`index-D5w0ypJS.js`），不要误报为已换新视觉。视觉改版代码已推送到 `origin/main`（提交 `49ff8b1`）。用户可执行：
 
 ```bash
-cd /opt/remote_carctl/backend   # 仅参考；前端源码目录按实际位置
-cd exp3/frontend
+# 服务器上的仓库路径按实际 clone 位置调整（例如 /opt/remote_carctl）
+cd /opt/remote_carctl
+git pull --ff-only
+
+cd frontend
 npm ci
 npm run typecheck
 npm test
@@ -344,6 +347,8 @@ npm run build
 sudo rsync -a --delete dist/ /www/wwwroot/agilex.yoyoyan.cn/
 sudo chown -R www:www /www/wwwroot/agilex.yoyoyan.cn
 sudo nginx -t && sudo systemctl reload nginx
+
+cd /opt/remote_carctl
 bash frontend/deploy/smoke-test.sh agilex.yoyoyan.cn
 ```
 
