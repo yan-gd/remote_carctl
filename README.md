@@ -1,15 +1,18 @@
 # exp3：经 MQTT 控制松灵 SCOUT MINI Pro Kit
 
-后端通过 MQTT 向小车下发运动/停止命令，并接收心跳、状态与执行回执。exp3 由两部分组成：
+后端通过 MQTT 向小车下发运动/停止命令，并接收心跳、状态与执行回执。exp3 由三部分组成：
 
 | 目录 | 内容 | 运行位置 |
 | --- | --- | --- |
 | [`backend/`](backend) | 完整的后端：以 exp2 为基线（17 个接口全部保留），新增机器人接口 `/api/v1/robot`、`/robot/status`、`/robot/control` 和 MQTT 客户端 | Linux 服务器 / Windows PC，Java 17 |
+| [`frontend/`](frontend) | Flutter Web 控制台：登录、总览、按住控制、告警、操作日志；前后端分离 | 浏览器；由服务器 nginx 同源托管 |
 | [`robot-bridge/`](robot-bridge) | 与小车通信的代码：MQTT ↔ ROS 桥接节点，把命令转成 `/cmd_vel`，上报心跳与状态，带看门狗 | 小车工控机；本次 Xavier 使用 ROS1 Melodic + Conda Python 3.7；另有 Noetic / ROS2 适配器 |
 | [`scripts/`](scripts) | `e2e_sim.py` 不接实车的端到端联调；`robot_cli.py` 命令行遥控（实车调试用）；`patrol_client.py` HTTP 客户端 | 后端 PC |
-| [`docs/`](docs) | [MQTT 协议](docs/MQTT-PROTOCOL.md)、[部署与实车联调](docs/DEPLOYMENT.md)、[测试报告](docs/TEST-REPORT.md) | — |
+| [`docs/`](docs) | [MQTT 协议](docs/MQTT-PROTOCOL.md)、[部署与实车联调](docs/DEPLOYMENT.md)、[测试报告](docs/TEST-REPORT.md)；前端部署见 [frontend/deploy/README.md](frontend/deploy/README.md) | — |
 
 接口细节见 [`backend/docs/API.md`](backend/docs/API.md)（第 5.18–5.20 节为机器人接口）。
+
+当前部署进度、现场验证证据、已知问题和后续 Agent 交接见 [`PROGRESS.md`](PROGRESS.md)。
 
 ## 1. 工作方式
 
@@ -161,6 +164,7 @@ PATROL_MQTT_USERNAME=robot
 PATROL_ROBOT_ID=SCOUT-001
 PATROL_DB_PATH=/opt/remote_carctl/backend/data/exp2.db
 PATROL_DEMO_ENABLED=false
+PATROL_WEB_ALLOWED_ORIGINS=https://agilex.yoyoyan.cn
 SERVER_SHUTDOWN=graceful
 EOF
   printf 'PATROL_MQTT_PASSWORD="%s"\n' "$MQTT_ESCAPED"
@@ -428,7 +432,27 @@ sudo systemctl stop scout-mqtt-bridge
 | 控制 503 `MQTT_UNAVAILABLE` | 后端到 Broker 的地址、密码和 mosquitto 服务 |
 | 有回执但车不动 | 底盘模式、急停、`/cmd_vel` 订阅和驱动；不要绕过看门狗或在线检查 |
 
-## 4. 验证结果（详见 [测试报告](docs/TEST-REPORT.md)）
+## 4. 前端（Flutter Web）
+
+`frontend/` 是独立的 Flutter Web 应用，通过 `/api/v1/**` 调用后端，部署后由 nginx 同源提供页面并反代 API。页面包括登录、机器人总览（1 Hz 刷新）、按住控制、告警和操作日志；操作按钮按后端角色禁用，MONITOR 只能急停。
+
+```powershell
+cd exp3\frontend
+flutter pub get
+flutter analyze
+flutter test
+flutter build web --release --no-web-resources-cdn
+```
+
+开发时用 `flutter run -d chrome --web-port=5173 --dart-define=API_BASE_URL=http://127.0.0.1:8080`，并在后端启动前设置 `PATROL_WEB_ALLOWED_ORIGINS=http://127.0.0.1:5173`。生产构建不要传 `API_BASE_URL`（保持同源），产物在 `frontend/build/web`。
+
+生产环境的 `PATROL_WEB_ALLOWED_ORIGINS` 必须显式包含 `https://agilex.yoyoyan.cn`：浏览器 POST 会带 `Origin`，而 Spring 只看到 nginx 代理后的请求，不会把它当成同源。未列出时登录会返回 403。
+
+部署目标域名为 `agilex.yoyoyan.cn`：nginx 托管静态文件并把 `/api/` 反代到 `127.0.0.1:8080`，HTTPS 用 Let's Encrypt，登录接口限流，生产默认关闭 Swagger。完整命令、安全清单与回滚步骤见 [frontend/deploy/README.md](frontend/deploy/README.md)。
+
+安全要点：JWT 只保存在页面内存；CSP/HSTS 等响应头由 nginx 设置；中文字体与 CanvasKit 全部本地打包，不依赖 `fonts.gstatic.com` 或 CDN；后端建议只监听 `127.0.0.1`。
+
+## 5. 验证结果（详见 [测试报告](docs/TEST-REPORT.md)）
 
 | 项 | 结果 |
 | --- | --- |
@@ -436,9 +460,10 @@ sudo systemctl stop scout-mqtt-bridge
 | 后端双进程重启验证 | PASS |
 | 桥接节点单元测试 | 41 项，Python 3.8 / paho 1.6.1 与 Python 3.13 / paho 2.1.0 均通过 |
 | 端到端模拟联调 | 25 项，两套桥接环境均通过；遗嘱触发离线 ≤ 0.03 s，Broker 重启后约 1.6 s 自动恢复，松手后停车且不再移动 |
+| 前端 Flutter Web（2026-10-23，本地） | `flutter analyze` 0 issues；15 项单元/Widget 测试通过；release 构建通过；真实后端 + Broker + `--ros sim` 桥接 + **nginx 1.28 HTTPS（自签）** + Chrome 的 E2E 覆盖操作员/监控员/观察员、按住续发、STOP、告警、日志，CSP 下零控制台错误 |
 | 本次现场联调（2026-10-23，用户反馈） | Xavier / Melodic 真实底盘状态、桥接上报心跳、后端状态查询和 STOP 回执已确认；实际运动与断网停车时间未在本节记录测量结果 |
 
-## 5. 采用的技术决策
+## 6. 采用的技术决策
 
 沿用此前在 `HANDOFF.md` 中确定的方案：
 
@@ -454,7 +479,7 @@ sudo systemctl stop scout-mqtt-bridge
 - 首次连接与断线重连都按固定间隔（默认 5 s，可配置）重试，不使用 Paho 自带的指数退避。
 - exp2 阶段的 PPT、PDF、设计文档没有复制到 exp3，仍在 `exp2/docs`。
 
-## 6. 待确认事项
+## 7. 待确认事项
 
 | # | 问题 | 当前默认 |
 | --- | --- | --- |

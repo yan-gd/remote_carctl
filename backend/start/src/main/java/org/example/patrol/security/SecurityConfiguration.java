@@ -16,6 +16,8 @@ public class SecurityConfiguration {
             throws Exception {
         http.csrf()
                 .disable()
+                .cors()
+                .and()
                 .formLogin()
                 .disable()
                 .httpBasic()
