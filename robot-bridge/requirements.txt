@@ -1,0 +1,3 @@
+# Python 3.6+. ROS itself (rospy or rclpy, geometry_msgs, nav_msgs, scout_msgs) comes from the ROS install.
+paho-mqtt>=1.5,<3
+PyYAML>=5.1

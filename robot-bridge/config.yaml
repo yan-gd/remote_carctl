@@ -1,0 +1,38 @@
+# SCOUT MINI MQTT bridge configuration (exp3).
+# Every key is optional; the values below are the defaults. Unknown keys are rejected.
+
+robot_id: SCOUT-001            # must equal patrol.robot.id on the backend (part of every topic)
+
+mqtt:
+  host: 127.0.0.1              # broker address as seen from the robot
+  port: 1883
+  username: null
+  password: null
+  client_id: null              # null = scout-bridge-<robot_id>-<random>
+  keepalive: 5                 # s; the broker sends our last will (offline) after ~1.5x this
+  reconnect_max: 5             # s; upper bound between reconnect attempts
+  tls: false
+  ca_certs: null               # CA file when tls is true
+
+motion:                        # what each command means; the backend never sends speeds
+  linear_speed: 0.3            # m/s for FORWARD/BACKWARD (hard cap 1.0)
+  angular_speed: 0.5           # rad/s for LEFT/RIGHT, turning in place (hard cap 1.5)
+
+safety:
+  watchdog_timeout: 0.6        # s without any control message before stopping (max 1.0, PER-006)
+  publish_rate: 20             # Hz on /cmd_vel while moving
+  stop_frames: 10              # zero-velocity messages after a stop, then /cmd_vel is left alone
+
+telemetry:
+  heartbeat_period: 1.0        # s
+  status_period: 0.5           # s
+  chassis_timeout: 1.0         # s; older chassis/odometry data is reported as null
+
+ros:
+  node_name: scout_mqtt_bridge
+  cmd_vel_topic: /cmd_vel      # geometry_msgs/Twist, subscribed by scout_base (ROS1 and ROS2)
+  odom_topic: /odom            # nav_msgs/Odometry (scout_base parameter odom_topic_name)
+  status_topic: /scout_status  # scout_msgs/ScoutStatus
+
+sim:                           # only used with --ros sim
+  battery_voltage: null        # a fixed voltage to exercise battery alarms; null = not reported
