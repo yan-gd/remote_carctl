@@ -1,6 +1,6 @@
 # exp3 项目进度与 Agent 交接
 
-更新时间：2026-10-23 晚（Asia/Shanghai）。本文记录代码状态、用户提供的现场结果和后续工作边界，供后续 Agent 接续；不是新一轮测试报告。部署命令统一见 [README 的 Quick Start](README.md#3-quick-start服务器--小车端)。
+更新时间：2026-10-23 深夜（Asia/Shanghai）。本文记录代码状态、用户提供的现场结果和后续工作边界，供后续 Agent 接续；不是新一轮测试报告。**第 11 节记录当晚最新一次前端视觉改版，视觉约束已覆盖第 10 节的旧配色与字体描述。** 部署命令统一见 [README 的 Quick Start](README.md#3-quick-start服务器--小车端)。
 
 ## 1. 接手时先知道这些
 
@@ -273,3 +273,83 @@ cd /home/agilex/Desktop/remote_carctl/robot-bridge
 - 部署后自检：`bash frontend/deploy/smoke-test.sh agilex.yoyoyan.cn`。
 
 下一位 Agent 应先确认公网登录/控制是否已由用户验收，再继续第 8 节第 1–6 步；不要把“页面可打开”当成“真实控制已验收”。
+
+## 11. 前端视觉改版（2026-10-23 深夜，React）
+
+### 11.1 用户最新视觉约束
+
+用户在审阅第 10 节的绿色/薄荷色版本后，明确要求：
+
+- **不要绿色主色**（原 teal / mint 配色废弃），也不要用“屎绿色”。
+- **中文用宋体，西文用 Times New Roman**。
+- **磨砂玻璃样式，整体更简约**；不要添加无用的图形 logo（例如单独的大写 “S”）。
+- 保留点状背景与动画；不要破坏前后端 API 链接。
+- 后续补充：**浅色背景纯白、点阵灰色并铺满整页**；顶部栏和侧边栏不能再用底色挡住点阵；卡片保持磨砂玻璃的透明感，并增加控件交互动画；**深色模式反过来**（纯黑背景、浅灰点阵、深色玻璃）。
+
+### 11.2 本次实际改动
+
+- `styles.css` 重写为**纯白/纯黑 + 灰色点阵**的玻璃主题：浅色 `#ffffff`，深色 `#000000`；移除了所有绿色/薄荷色 token，也不再使用冷灰蓝背景。
+- 字体改为系统字体栈：
+  `'Times New Roman', 'Songti SC', STSong, SimSun, 'Noto Serif CJK SC', serif`。
+  因此中文使用宋体（Windows 为 SimSun），西文与数字使用 Times New Roman；不再使用 ZCOOL XiaoWei / Cormorant Garamond，也移除了 `public/fonts/` 下的自托管字体和 `@font-face`。
+- 点阵层铺满整个视口：`Atmosphere` 只保留 `DotPattern`，没有渐隐遮罩、没有彩色光晕；浅色点颜色 `rgba(0,0,0,0.22)`，深色 `rgba(255,255,255,0.18)`。点阵缓慢漂移 + 稀疏闪烁，`prefers-reduced-motion` 下停止。
+- **顶栏与侧栏改为完全透明**，只保留 1px 发丝边界，让点阵连续覆盖页面上方和侧边；顶部栏不再 sticky，避免透明栏与滚动内容重叠。导航选中态和侧栏状态卡仍是局部玻璃元素。
+- 登录面板、弹窗和卡片使用半透明白/黑玻璃、细边框、柔和阴影与 `backdrop-filter: blur(...) saturate(...)`；浅色卡片约 55% 白、深色约 10% 白，保持透明感。
+- 增加控件交互动画：按钮/导航 hover 位移与阴影、输入 focus 环、方向盘 hover 抬升、按住 `scale(0.94)` + 反色 + `press-ring` 波纹，松开恢复。
+- 移除图形品牌标（侧栏/登录页的 “S” 方块）、轨道图、装饰编号、超大 “S” 水印、霓虹色标题渐变等；侧栏和登录页只保留文字 “SCOUT”。
+- 页面结构简化：顶部显示页面标题与一句说明；巡检页使用“路线/任务”分段控件；控制页合并为单张卡片，移动端把方向盘放在说明之前；列表不再显示装饰序号。
+- 修复弹窗：`Modal` 通过 `createPortal` 挂到 `document.body`，避免页面入场动画的 `transform` 把 `position: fixed` 遮罩限制在内容区；打开时给 `body` 加 `modal-open` 锁滚动。页面入场动画也改为只做透明度，避免建立额外的合成层。
+- 响应式断点：960px 顶栏导航，760px 单列/方向盘前置，560px 隐藏顶部说明，360px 指标单列。
+- `ApiClient`、`HoldController`、路由与角色的业务逻辑未改动；本次只改视觉与展示结构。
+
+### 11.3 修改文件
+
+- 主题与背景：`frontend/src/styles.css`、`frontend/src/components/Atmosphere.tsx`、`frontend/src/components/DotPattern.tsx`、`frontend/index.html`、`frontend/public/favicon.svg`。
+- 布局与页面：`App.tsx`、`components/Layout.tsx`、`components/UI.tsx`、`pages/LoginPage.tsx`、`pages/DashboardPage.tsx`、`pages/ControlPage.tsx`、`pages/InspectionPage.tsx`、`pages/AlarmsPage.tsx`、`pages/LogsPage.tsx`。
+- 文档与截图：`frontend/README.md`、`frontend/docs/screenshots/*.png`（全部替换为本次视觉的模拟数据截图；新增深色模式截图）。
+- `frontend/public/fonts/` 已删除（不再使用自托管显示字体）。
+
+### 11.4 验证结果（本机，非实车）
+
+- `npm run typecheck`：通过。
+- `npm test`：**13 项全部通过**（API 客户端 7、HoldController 4、LoginPage 2）。
+- `npm run build`：成功；产物为单个哈希 JS + 单个哈希 CSS；无内联脚本/内联样式。
+- 用本地静态服务器按生产 CSP（`script-src 'self'; style-src 'self'; connect-src 'self'`）提供 `dist/`，Playwright + 模拟 API 走完登录、总览、巡检、控制、告警、日志和路线/任务弹窗：
+  - 0 控制台错误、0 页面异常、0 个 `[style]` 属性；
+  - 计算字体栈包含 `Times New Roman` 与宋体 fallback；
+  - 浅色 `body` 背景 `rgb(255,255,255)`、点阵 `rgba(0,0,0,0.22)`；深色 `body` 背景 `rgb(0,0,0)`、点阵 `rgba(255,255,255,0.18)`；点阵 `mask-image: none`，`.atmosphere` 尺寸等于 1440×1100 视口；
+  - 顶栏和侧栏计算背景均为 `rgba(0,0,0,0)`（透明）、`backdrop-filter: none`，点阵不再被控件栏遮挡；
+  - 登录面板背景 `rgba(255,255,255,0.65)` + `blur(32px) saturate(1.2)`；主卡片为 55% 白玻璃；深色为半透明深色玻璃；
+  - 1440 / 820 / 390 / 320 宽度均无横向溢出；
+  - 点阵漂移 transform 在两次采样中变化，动画确实运行；`prefers-reduced-motion: reduce` 下为 `none`；
+  - 交互动画：方向盘 hover `translateY(-2px)`、环形阴影 4px；按住 `scale(0.94)`、背景切换为反色、`press-ring` 动画运行；
+  - 请求路径与请求体未变：登录、状态轮询、路线/任务 GET+POST、告警 GET + PATCH 确认、日志 GET、控制 POST；
+  - 按住前进约 0.8 s 后端收到 5 次 `FORWARD`，松开后收到 `STOP`；退出登录再发 `STOP`；
+  - MONITOR 可确认告警、不能前进但可 STOP；VIEWER 巡检页无新建/编辑按钮。
+- 截图使用模拟数据；**视觉改版后尚未用真实后端/真实小车重新联调**，也尚未部署到服务器。
+
+### 11.5 部署与未完成项
+
+本次没有服务器 SSH/面板权限，未执行线上发布；公网 `https://agilex.yoyoyan.cn` 仍应视为第 10 节记录的旧构建（`index-D5w0ypJS.js`），不要误报为已换新视觉。用户可执行：
+
+```bash
+cd /opt/remote_carctl/backend   # 仅参考；前端源码目录按实际位置
+cd exp3/frontend
+npm ci
+npm run typecheck
+npm test
+npm run build
+
+# 服务器上的前端站点目录（BT 面板实际路径）
+sudo rsync -a --delete dist/ /www/wwwroot/agilex.yoyoyan.cn/
+sudo chown -R www:www /www/wwwroot/agilex.yoyoyan.cn
+sudo nginx -t && sudo systemctl reload nginx
+bash frontend/deploy/smoke-test.sh agilex.yoyoyan.cn
+```
+
+注意：
+
+- 新构建的 JS/CSS 文件名带新 hash；`smoke-test.sh` 只检查页面、CSP、API 401 等，不校验具体 bundle 名。
+- 没有新增字体文件，部署后不需要额外的 `font-src` 配置；CSP 保持严格即可。
+- 截图是模拟数据，不是实车或真实后端验收。真实公网验收仍需 OPERATOR 登录、状态在线、按住控制、STOP 回执与角色检查。
+- 后续视觉修改必须保留用户约束：**不要绿色主色、不要无用 logo、中文宋体、西文 Times New Roman、纯白/纯黑底 + 灰色点阵铺满整页、顶栏/侧栏不遮挡点阵、卡片磨砂玻璃、控件交互动画、深色模式反色**。第 10 节的绿色主题描述只作为历史记录。

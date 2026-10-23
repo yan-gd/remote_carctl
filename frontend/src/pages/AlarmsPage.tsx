@@ -118,7 +118,9 @@ export function AlarmsPage({ api, role }: { api: ApiClient; role: string }) {
             <article className="list-item" key={item.id}>
               <div className="list-main">
                 <div className="pill-row">
-                  <StatusPill tone={alarmTone(item.level)}>{alarmLevelLabel(item.level)}</StatusPill>
+                  <StatusPill tone={alarmTone(item.level)}>
+                    {alarmLevelLabel(item.level)}
+                  </StatusPill>
                   <StatusPill tone={item.status === 'ACKNOWLEDGED' ? 'ok' : 'warn'}>
                     {item.status === 'ACKNOWLEDGED' ? '已确认' : '未确认'}
                   </StatusPill>

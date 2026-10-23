@@ -13,11 +13,11 @@ SCOUT MINI 远程巡检控制台。前后端分离：本目录是独立的 React
 | 告警 | 级别/状态筛选、分页；MONITOR 可在页面确认告警 |
 | 日志 | 操作类型筛选、分页；后端按角色限制本人/全部范围 |
 
-未实现：任务下发执行、导航/SLAM、WebSocket 实时推送、移动端专门布局。
+未实现：任务下发执行、导航/SLAM、WebSocket 实时推送；移动端使用响应式布局，不做独立移动端应用。
 
 ## 界面预览
 
-本地模拟底盘联调截图（不是实车）：
+以下为本地模拟数据下的界面截图（用于展示视觉，不是实车联调记录）：
 
 ![登录页](docs/screenshots/login.png)
 
@@ -32,6 +32,35 @@ SCOUT MINI 远程巡检控制台。前后端分离：本目录是独立的 React
 ![告警页](docs/screenshots/alarms.png)
 
 ![日志页](docs/screenshots/logs.png)
+
+![巡检只读视图](docs/screenshots/inspection-viewer.png)
+
+![移动端总览](docs/screenshots/mobile-dashboard.png)
+
+![移动端巡检](docs/screenshots/mobile-inspection.png)
+
+深色模式（跟随系统）：
+
+![深色登录页](docs/screenshots/dark-login.png)
+
+![深色总览页](docs/screenshots/dark-dashboard.png)
+
+## 界面风格
+
+- **字体**：中文使用系统宋体（`Songti SC` / `SimSun` / `STSong`），西文使用 `Times New Roman`。字体栈为
+  `'Times New Roman', 'Songti SC', STSong, SimSun, 'Noto Serif CJK SC', serif`；不加载外部字体。
+- **纯白/纯黑底 + 灰点**：浅色背景为 `#ffffff`，深色背景为 `#000000`；点阵颜色分别为
+  `rgba(0, 0, 0, 0.22)` 与 `rgba(255, 255, 255, 0.18)`。点阵不使用渐隐遮罩，固定背景铺满整个视口。
+- **磨砂玻璃**：登录面板、弹窗和卡片使用半透明白/黑玻璃、细边框、柔和阴影和
+  `backdrop-filter: blur(...) saturate(...)`；顶栏与侧栏本身完全透明，只保留 1px 发丝线，
+  让点阵从页面顶部和侧边连续覆盖，不再被控件栏挡住。
+- **点阵动画**：由 Magic UI v3 的 `DotPattern` 改写而来（`src/components/DotPattern.tsx`），
+  使用 SVG `pattern` + CSS 实现缓慢漂移与稀疏闪烁，不引入 Tailwind 或 motion 依赖。
+- **控件交互**：按钮/导航 hover 位移、卡片 hover 阴影、输入 focus 环、方向盘按住缩放并触发
+  `press-ring` 波纹；`prefers-reduced-motion: reduce` 下关闭点阵和指示灯动画。
+- **无图形 logo**：界面只保留文字品牌名 “SCOUT” 和页面标题，登录页没有品牌图形标记。
+- **CSP 兼容**：无内联脚本、无内联 `style` 属性、无外部 CDN，生产构建保持
+  `script-src 'self'; style-src 'self'`。
 
 ## 1. 开发
 
@@ -89,18 +118,20 @@ src/
   control/useHoldControl.ts   React 绑定
   robot/RobotContext.tsx      1 Hz 状态轮询、命令发送
   components/                 布局、卡片、分页、Modal、状态标签
+  components/Atmosphere.tsx   点阵背景层与光晕
+  components/DotPattern.tsx   Magic UI Dot Pattern 的 CSS 动画改写
   pages/                      登录、总览、巡检、控制、告警、日志
   utils/format.ts             中文格式化
-  styles.css                  响应式主题（跟随系统深浅色）
+  styles.css                  纯白/纯黑点阵玻璃主题、宋体/Times New Roman、响应式
 deploy/                       nginx 配置、部署与自检脚本
-docs/screenshots/             本地联调截图
+docs/screenshots/             界面截图（模拟数据）
 ```
 
 ## 4. 安全设计
 
 - **令牌**：JWT 仅存在 `ApiClient` 私有字段（内存），不写 `localStorage`、`sessionStorage`、URL 或日志；刷新页面必须重新登录。
 - **传输**：生产强制 HTTPS；`VITE_API_BASE_URL` 为非回环 `http://` 时应用直接显示配置错误。nginx 配置 HSTS/CSP/nosniff/X-Frame-Options。
-- **CSP**：`script-src 'self'`、`style-src 'self'`、`connect-src 'self'`，无内联脚本、无外部字体/CDN；生产构建已按此策略联调。
+- **CSP**：`script-src 'self'`、`style-src 'self'`、`connect-src 'self'`，无内联脚本、无外部 CDN；中文宋体与西文 Times New Roman 均为系统字体，不产生外部字体请求。生产构建已按严格 CSP 验证。
 - **角色**：界面只做禁用/隐藏；真正权限由后端 `RobotCommandExecutor`、`RolePolicy` 和 Spring Security 校验。MONITOR 只能 STOP，VIEWER 只读。
 - **运动安全**：按住每 200 ms 续发，请求串行化；松开、指针取消、失焦、切页、退出都 STOP；STOP 会等在途 keepalive 完成后发送，避免迟到 FORWARD 覆盖 STOP。小车侧 0.6 s 看门狗是最后兜底。
 - **退出并发**：退出时先尽力 STOP，再清除令牌；新登录的令牌不会被旧会话异步清理（`ApiClient` 单实例，登录后旧请求不会覆盖新 token）。
@@ -116,7 +147,20 @@ npm test            # 13 项：API 7、HoldController 4、LoginPage 2
 npm run build       # Vite production build
 ```
 
-2026-10-23 本机联调（真实 Broker + 后端 JAR + 模拟桥接 `--ros sim` + Chrome）：
+2026-10-23 视觉改版验证（本地模拟数据 + 生产构建 + 严格 CSP，不是实车）：
+
+- `npm run typecheck` 通过；`npm test` 13 项全部通过；`npm run build` 成功。
+- 用本地静态服务器按生产 CSP 提供 `dist/`，以 Playwright + 模拟 API 走完登录、总览、巡检、控制、告警、日志与路线/任务弹窗：0 控制台错误、0 页面异常、0 个内联 `style` 属性。
+- 主题核验：浅色 `body` 背景为 `rgb(255,255,255)`、点阵 `rgba(0,0,0,0.22)`；深色 `body` 背景为 `rgb(0,0,0)`、点阵 `rgba(255,255,255,0.18)`；`mask-image: none`，点阵层覆盖整个视口；顶栏与侧栏计算背景为透明，点阵不再被控件栏覆盖。
+- 登录面板计算背景为半透明白色并带 `blur(32px) saturate(1.2)`；主卡片使用 55% 白玻璃；深色使用深色半透明玻璃。
+- 请求路径与请求体未变：`POST /api/v1/auth/login`、`GET /api/v1/robot/status`、`GET /api/v1/robot`、`GET/POST /api/v1/routes`、`GET/POST /api/v1/tasks`、`GET /api/v1/alarms`、`PATCH /api/v1/alarms/{id}/ack`、`GET /api/v1/control-logs`、`POST /api/v1/robot/control`。
+- 按住前进约 0.8 s，后端收到 5 次 `FORWARD`，松开后收到 `STOP`；退出登录再发一次 `STOP`。
+- 交互核验：方向盘 hover 位移 `translateY(-2px)` 并出现环与阴影，按住缩放 `scale(0.94)`、背景切换为按钮反色、`press-ring` 动画运行；松开恢复。
+- MONITOR 可确认告警、前进按钮禁用但 STOP 可用；VIEWER 巡检页没有新建/编辑按钮。
+- 1440、820、390、320 宽度均无横向溢出；点阵漂移动画确实在运行，`prefers-reduced-motion: reduce` 下点阵动画为 `none`。
+- 截图使用模拟数据；视觉改版后尚未重新进行真实后端/真实小车联调。
+
+改版前的全栈联调记录（API 客户端与按住控制逻辑未改，视觉层已重写）：
 
 - 登录 → 总览显示在线、21.80 V、位姿；
 - 按住前进 0.9 s 期间观察到 ≥3 条 FORWARD，松开后 STOP；

@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ApiClient } from '../api/client';
 import type { PatrolRoute, PatrolTask } from '../api/types';
-import { Card, Empty, ErrorNotice, Pager, StatusPill, errorMessage } from '../components/UI';
+import {
+  Card,
+  Empty,
+  ErrorNotice,
+  Pager,
+  StatusPill,
+  errorMessage,
+} from '../components/UI';
 import { formatDateTime, taskStatusLabel } from '../utils/format';
 import { RouteDialog } from './RouteDialog';
 import { TaskDialog } from './TaskDialog';
@@ -107,35 +114,30 @@ export function InspectionPage({ api, role }: { api: ApiClient; role: string }) 
 
   return (
     <div className="stack">
-      <div className="page-intro">
-        <div>
-          <h2>巡检管理</h2>
-          <p className="muted">路线与任务只维护计划数据，不代表小车已执行。</p>
+      <div className="toolbar">
+        <div className="segmented" role="tablist" aria-label="巡检视图">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'routes'}
+            className={tab === 'routes' ? 'active' : ''}
+            onClick={() => setTab('routes')}
+          >
+            路线
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'tasks'}
+            className={tab === 'tasks' ? 'active' : ''}
+            onClick={() => setTab('tasks')}
+          >
+            任务
+          </button>
         </div>
-        <StatusPill tone={canEdit ? 'ok' : 'neutral'}>
-          {canEdit ? '操作员可编辑' : '只读'}
+        <StatusPill tone="neutral">
+          {canEdit ? '操作员可编辑' : '只读视图'}
         </StatusPill>
-      </div>
-
-      <div className="segmented" role="tablist" aria-label="巡检视图">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'routes'}
-          className={tab === 'routes' ? 'active' : ''}
-          onClick={() => setTab('routes')}
-        >
-          路线
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'tasks'}
-          className={tab === 'tasks' ? 'active' : ''}
-          onClick={() => setTab('tasks')}
-        >
-          任务
-        </button>
       </div>
 
       {notice && <div className="notice notice-info">{notice}</div>}

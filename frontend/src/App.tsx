@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ApiClient } from './api/client';
 import type { UserView } from './api/types';
 import { apiBaseUrlProblem } from './config';
+import { Atmosphere } from './components/Atmosphere';
 import { Shell, type Tab } from './components/Layout';
 import { errorMessage } from './components/UI';
 import { AlarmsPage } from './pages/AlarmsPage';
@@ -66,11 +67,13 @@ export default function App() {
     setTab('dashboard');
   }
 
+  let content: ReactNode;
+
   if (configProblem) {
-    return (
+    content = (
       <main className="login-page">
-        <section className="login-panel">
-          <p className="eyebrow">配置错误</p>
+        <section className="login-panel login-panel-solo">
+          <p className="kicker">CONFIGURATION</p>
           <h1>不安全的访问配置</h1>
           <p className="notice notice-error">{configProblem}</p>
           <p className="muted">
@@ -80,29 +83,34 @@ export default function App() {
         </section>
       </main>
     );
-  }
-
-  if (!user) {
-    return (
+  } else if (!user) {
+    content = (
       <LoginPage onLogin={login} busy={busy} error={error} notice={notice} />
+    );
+  } else {
+    content = (
+      <RobotProvider api={api}>
+        <Shell
+          username={user.username}
+          role={user.role}
+          active={tab}
+          onNavigate={setTab}
+          onLogout={logout}
+        >
+          {tab === 'dashboard' && <DashboardPage />}
+          {tab === 'inspection' && <InspectionPage api={api} role={user.role} />}
+          {tab === 'control' && <ControlPage api={api} role={user.role} />}
+          {tab === 'alarms' && <AlarmsPage api={api} role={user.role} />}
+          {tab === 'logs' && <LogsPage api={api} />}
+        </Shell>
+      </RobotProvider>
     );
   }
 
   return (
-    <RobotProvider api={api}>
-      <Shell
-        username={user.username}
-        role={user.role}
-        active={tab}
-        onNavigate={setTab}
-        onLogout={logout}
-      >
-        {tab === 'dashboard' && <DashboardPage />}
-        {tab === 'inspection' && <InspectionPage api={api} role={user.role} />}
-        {tab === 'control' && <ControlPage api={api} role={user.role} />}
-        {tab === 'alarms' && <AlarmsPage api={api} role={user.role} />}
-        {tab === 'logs' && <LogsPage api={api} />}
-      </Shell>
-    </RobotProvider>
+    <div className="app-root">
+      <Atmosphere />
+      {content}
+    </div>
   );
 }

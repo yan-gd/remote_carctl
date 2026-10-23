@@ -28,13 +28,10 @@ export function LoginPage({
 
   return (
     <main className="login-page">
-      <section className="login-panel">
-        <div className="brand-mark" aria-hidden="true">
-          S
-        </div>
-        <p className="eyebrow">SCOUT MINI</p>
-        <h1>远程巡检控制台</h1>
-        <p className="muted">登录后查看机器人状态、执行巡检计划与控制。</p>
+      <section className="login-panel" aria-labelledby="login-title">
+        <p className="kicker">SCOUT MINI · REMOTE PATROL</p>
+        <h1 id="login-title">远程巡检控制台</h1>
+        <p className="login-sub">使用已授权的巡检账号登录。</p>
 
         {notice && <div className="notice notice-info">{notice}</div>}
         {(error || validation) && (
@@ -71,10 +68,15 @@ export function LoginPage({
           </button>
         </form>
 
-        <p className="fine-print">
-          令牌只保存在当前页面内存中，刷新即退出；请通过 HTTPS 访问。
+        <p className="fine-print login-security">
+          令牌仅保存在当前页面内存中，刷新即退出。请通过 HTTPS 访问。
         </p>
       </section>
+
+      <footer className="login-foot">
+        <span>SCOUT MINI</span>
+        <span>REMOTE PATROL CONSOLE</span>
+      </footer>
     </main>
   );
 }

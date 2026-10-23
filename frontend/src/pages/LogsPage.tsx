@@ -48,7 +48,7 @@ export function LogsPage({ api }: { api: ApiClient }) {
 
   return (
     <Card
-      title="操作日志"
+      title="操作记录"
       actions={
         <>
           <select
