@@ -344,9 +344,14 @@ npm test
 npm run build
 
 # 服务器上的前端站点目录（BT 面板实际路径）
-sudo rsync -a --delete dist/ /www/wwwroot/agilex.yoyoyan.cn/
+# 保护 .well-known（证书续期）和 BT 的 .user.ini
+sudo rsync -a --delete --exclude='.well-known' --exclude='.user.ini' \
+  dist/ /www/wwwroot/agilex.yoyoyan.cn/
 sudo chown -R www:www /www/wwwroot/agilex.yoyoyan.cn
 sudo nginx -t && sudo systemctl reload nginx
+
+# 确认线上引用的是新构建（本地构建文件名示例：index-CljkQ52s.js）
+curl -s https://agilex.yoyoyan.cn/ | grep -o 'assets/index-[^"]*\.js'
 
 cd /opt/remote_carctl
 bash frontend/deploy/smoke-test.sh agilex.yoyoyan.cn
