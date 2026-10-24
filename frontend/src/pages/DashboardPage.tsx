@@ -10,7 +10,7 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="stack">
+    <div className="stack dashboard-page">
       {error && <ErrorNotice message={error} onRetry={() => void refresh()} />}
 
       <Card className="hero-card">

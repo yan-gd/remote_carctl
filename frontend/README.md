@@ -17,7 +17,7 @@ SCOUT MINI 远程巡检控制台。前后端分离：本目录是独立的 React
 
 ## 界面预览
 
-以下为本地模拟数据下的界面截图（用于展示视觉，不是实车联调记录）。点阵仅出现在登录页，登录后的控制台为无点阵的纯白/纯黑背景：
+以下为本地模拟数据下的界面截图（用于展示视觉，不是实车联调记录）。登录页与 Dashboard 共用流动点阵背景，其余页面为无点阵的柔和光影背景。点阵流动和鼠标波纹需运行页面查看，静态截图不能呈现完整动效：
 
 ![登录页](docs/screenshots/login.png)
 
@@ -47,12 +47,11 @@ SCOUT MINI 远程巡检控制台。前后端分离：本目录是独立的 React
 
 ## 界面风格
 
-- **字体**：中文使用系统宋体（`Songti SC` / `SimSun` / `STSong`），西文使用 `Times New Roman`。字体栈为
-  `'Times New Roman', 'Songti SC', STSong, SimSun, 'Noto Serif CJK SC', serif`；不加载外部字体。
-- **登录页点阵**：只有登录页渲染点阵背景。浅色为纯白底 + `rgba(0, 0, 0, 0.18)` 灰点，深色为纯黑底 + `rgba(255, 255, 255, 0.15)` 灰点；点距收紧到 **16px**，铺满登录页视口。点阵是静态的，没有波纹、漂移或亮暗波动。
-- **登录后背景**：dashboard、巡检、控制、告警、日志不再渲染点阵，保持纯白/纯黑背景，让卡片和内容更安静；顶栏与侧栏保持透明，只留 1px 发丝线。
-- **磨砂玻璃**：登录面板、弹窗和卡片使用半透明白/黑玻璃、细边框、柔和阴影和
-  `backdrop-filter: blur(...) saturate(...)`。
+- **字体**：中文改用更适合控制台的现代黑体，macOS 优先苹方（`PingFang SC`），Windows 使用微软雅黑（`Microsoft YaHei UI` / `Microsoft YaHei`），Linux 回退思源黑体；数字和西文保留 `Times New Roman`。全部使用系统字体，不加载外部字体。
+- **共享点阵**：登录页和 Dashboard 共用同一 Canvas 点阵，约 20px 间距，持续产生交错流波、明暗变化，并在鼠标附近平滑排开、扩散波纹。上限 30fps，限制大屏绘制点数和设备像素比，切到后台暂停；减少动态效果时只画静态点阵，Canvas 不可用时回退 SVG。动画不触发表单或 React 状态更新。
+- **控制台背景**：Dashboard 透出与登录页相同的点阵与环境光；巡检、控制、告警、日志不渲染点阵。浅色为雾白、深色为石墨，侧栏和卡片保留磨砂透光层次。
+- **磨砂玻璃**：卡片和遥测控件加入半透明底色、斜向透光、双层细高光、内阴影和轻微颗粒纹理，搭配 `backdrop-filter: blur(...) saturate(...)`；浅色和深色均有独立材质参数。
+- **一屏布局**：Dashboard 将设备摘要、8 项遥测、最近回执按视口高度分配空间，桌面采用 4×2 遥测网格，手机采用紧凑 2×4 布局。已检查 1920×1080、1440×900、1366×768、1280×720、1024×768、768×1024、390×844、375×667 的完整展示。桌面巡检/告警/日志长列表只在列表内部滚动，筛选和分页留在视口内，不删减数据；极矮视口（≤600px）保留内容滚动以免裁切。
 - **控件交互**：按钮/导航 hover 位移、卡片 hover 阴影、输入 focus 环、方向盘按住缩放并触发
   `press-ring` 波纹；`prefers-reduced-motion: reduce` 下关闭控件过渡和指示灯动画。
 - **无图形 logo**：界面只保留文字品牌名 “SCOUT” 和页面标题，登录页没有品牌图形标记。
@@ -115,11 +114,11 @@ src/
   control/useHoldControl.ts   React 绑定
   robot/RobotContext.tsx      1 Hz 状态轮询、命令发送
   components/                 布局、卡片、分页、Modal、状态标签
-  components/Atmosphere.tsx   登录页静态点阵
+  components/Atmosphere.tsx   登录页 / Dashboard 共享交互点阵
   components/DotPattern.tsx   Magic UI Dot Pattern 的静态改写
   pages/                      登录、总览、巡检、控制、告警、日志
   utils/format.ts             中文格式化
-  styles.css                  登录页点阵 + 无点阵控制台、宋体/Times New Roman、磨砂玻璃
+  styles.css                  交互点阵、现代中文黑体/Times New Roman、磨砂玻璃、一屏布局
 deploy/                       nginx 配置、部署与自检脚本
 docs/screenshots/             界面截图（模拟数据）
 ```
@@ -128,7 +127,7 @@ docs/screenshots/             界面截图（模拟数据）
 
 - **令牌**：JWT 仅存在 `ApiClient` 私有字段（内存），不写 `localStorage`、`sessionStorage`、URL 或日志；刷新页面必须重新登录。
 - **传输**：生产强制 HTTPS；`VITE_API_BASE_URL` 为非回环 `http://` 时应用直接显示配置错误。nginx 配置 HSTS/CSP/nosniff/X-Frame-Options。
-- **CSP**：`script-src 'self'`、`style-src 'self'`、`connect-src 'self'`，无内联脚本、无外部 CDN；中文宋体与西文 Times New Roman 均为系统字体，不产生外部字体请求。生产构建已按严格 CSP 验证。
+- **CSP**：`script-src 'self'`、`style-src 'self'`、`connect-src 'self'`，无内联脚本、无外部 CDN；中文黑体与西文 Times New Roman 均为系统字体，不产生外部字体请求。生产构建已按严格 CSP 验证。
 - **角色**：界面只做禁用/隐藏；真正权限由后端 `RobotCommandExecutor`、`RolePolicy` 和 Spring Security 校验。MONITOR 只能 STOP，VIEWER 只读。
 - **运动安全**：按住每 200 ms 续发，请求串行化；松开、指针取消、失焦、切页、退出都 STOP；STOP 会等在途 keepalive 完成后发送，避免迟到 FORWARD 覆盖 STOP。小车侧 0.6 s 看门狗是最后兜底。
 - **退出并发**：退出时先尽力 STOP，再清除令牌；新登录的令牌不会被旧会话异步清理（`ApiClient` 单实例，登录后旧请求不会覆盖新 token）。
@@ -144,7 +143,7 @@ npm test            # 13 项：API 7、HoldController 4、LoginPage 2
 npm run build       # Vite production build
 ```
 
-2026-10-24 视觉改版验证（本地模拟数据 + 生产构建 + 严格 CSP，不是实车）：
+早期视觉改版验证（2026-10-24 历史记录，不是实车；其中静态点阵和宋体约束已被后续需求替代，当前界面以本页“界面风格”和 `../PROGRESS.md` 第 13 节为准）：
 
 - `npm run typecheck` 通过；`npm test` 13 项全部通过；`npm run build` 成功。
 - 用本地静态服务器按生产 CSP 提供 `dist/`，以 Playwright + 模拟 API 走完登录、总览、巡检、控制、告警、日志与路线/任务弹窗：0 控制台错误、0 页面异常、0 个内联 `style` 属性。

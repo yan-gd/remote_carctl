@@ -1,31 +1,35 @@
 /* =========================================================================
    SCOUT MINI remote patrol console
-   Frosted glass, neutral graphite palette, Times New Roman + Songti.
+   Frosted glass, neutral graphite palette, Times New Roman + modern CJK sans.
    ========================================================================= */
 
 :root {
   color-scheme: light;
 
-  --font-serif:
-    'Times New Roman', 'Songti SC', 'STSong', SimSun, 'Noto Serif CJK SC',
-    'Noto Serif SC', serif;
+  --font-ui:
+    'Times New Roman', 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei',
+    'Noto Sans CJK SC', 'Noto Sans SC', sans-serif;
 
-  --bg: #ffffff;
-  --text: #111111;
-  --text-soft: #333333;
-  --muted: #5b5b5b;
-  --faint: #8a8a8a;
+  --bg: #f3f4f5;
+  --text: #202328;
+  --text-soft: #41474f;
+  --muted: #626b74;
+  --faint: #737d87;
   --line: rgb(0 0 0 / 9%);
   --line-strong: rgb(0 0 0 / 18%);
 
-  --glass: rgb(255 255 255 / 55%);
-  --glass-strong: rgb(255 255 255 / 65%);
-  --glass-soft: rgb(255 255 255 / 42%);
-  --glass-border: rgb(0 0 0 / 14%);
-  --glass-highlight: rgb(255 255 255 / 90%);
-  --glass-sheen: rgb(255 255 255 / 55%);
-  --field-bg: rgb(255 255 255 / 70%);
-  --nav-active: rgb(255 255 255 / 75%);
+  --glass: rgb(255 255 255 / 48%);
+  --glass-strong: rgb(255 255 255 / 62%);
+  --glass-soft: rgb(255 255 255 / 30%);
+  --glass-border: rgb(135 148 160 / 22%);
+  --glass-highlight: rgb(255 255 255 / 96%);
+  --glass-sheen: rgb(255 255 255 / 72%);
+  --field-bg: rgb(255 255 255 / 46%);
+  --nav-active: rgb(255 255 255 / 68%);
+  --glass-edge: rgb(124 139 153 / 12%);
+  --ambient: rgb(166 183 196 / 24%);
+  --ambient-soft: rgb(196 207 213 / 30%);
+  --grain-opacity: 0.035;
 
   --accent: #333333;
   --accent-strong: #000000;
@@ -42,39 +46,43 @@
   --danger: #9b2f34;
   --danger-soft: rgb(155 47 52 / 8%);
 
-  --dot-color: rgb(0 0 0 / 18%);
+  --dot-color: rgb(55 72 87 / 29%);
 
   --shadow-card:
-    0 1px 1px rgb(0 0 0 / 5%), 0 30px 65px -34px rgb(0 0 0 / 32%);
+    0 2px 5px rgb(39 52 64 / 3%), 0 16px 38px -24px rgb(36 51 65 / 24%);
   --shadow-panel:
-    0 2px 4px rgb(0 0 0 / 6%), 0 40px 110px -44px rgb(0 0 0 / 40%);
+    0 4px 10px rgb(31 47 63 / 4%), 0 36px 90px -34px rgb(36 51 65 / 28%);
   --radius-sm: 0.6rem;
   --radius-md: 0.85rem;
   --radius-lg: 1.15rem;
   --radius-xl: 1.45rem;
-  --sidebar-width: 15rem;
+  --sidebar-width: 13.5rem;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
 
-    --bg: #000000;
+    --bg: #101214;
     --text: #f2f2f2;
     --text-soft: #d2d2d2;
     --muted: #a3a3a3;
-    --faint: #7a7a7a;
+    --faint: #939ca5;
     --line: rgb(255 255 255 / 12%);
     --line-strong: rgb(255 255 255 / 24%);
 
-    --glass: rgb(255 255 255 / 10%);
-    --glass-strong: rgb(255 255 255 / 14%);
-    --glass-soft: rgb(255 255 255 / 6%);
-    --glass-border: rgb(255 255 255 / 16%);
-    --glass-highlight: rgb(255 255 255 / 8%);
-    --glass-sheen: rgb(255 255 255 / 5%);
-    --field-bg: rgb(255 255 255 / 9%);
-    --nav-active: rgb(255 255 255 / 12%);
+    --glass: rgb(36 41 47 / 52%);
+    --glass-strong: rgb(43 49 56 / 64%);
+    --glass-soft: rgb(35 41 48 / 38%);
+    --glass-border: rgb(191 208 225 / 15%);
+    --glass-highlight: rgb(222 234 245 / 18%);
+    --glass-sheen: rgb(222 234 245 / 7%);
+    --field-bg: rgb(13 18 23 / 24%);
+    --nav-active: rgb(205 220 235 / 10%);
+    --glass-edge: rgb(0 0 0 / 26%);
+    --ambient: rgb(107 127 145 / 18%);
+    --ambient-soft: rgb(74 91 104 / 18%);
+    --grain-opacity: 0.045;
 
     --accent: #d0d0d0;
     --accent-strong: #ffffff;
@@ -91,7 +99,7 @@
     --danger: #f0a3a3;
     --danger-soft: rgb(240 163 163 / 12%);
 
-    --dot-color: rgb(255 255 255 / 15%);
+    --dot-color: rgb(206 220 233 / 30%);
 
     --shadow-card:
       0 1px 1px rgb(0 0 0 / 30%), 0 24px 60px -36px rgb(0 0 0 / 85%);
@@ -119,7 +127,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-serif);
+  font-family: var(--font-ui);
   font-size: 16px;
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
@@ -195,7 +203,7 @@ code {
   padding: 0.08em 0.32em;
   border-radius: 0.3rem;
   background: var(--glass-soft);
-  font-family: var(--font-serif);
+  font-family: var(--font-ui);
   font-size: 0.9em;
 }
 
@@ -208,6 +216,7 @@ code {
 
 .app-root {
   position: relative;
+  isolation: isolate;
   min-height: 100vh;
 }
 
@@ -217,6 +226,10 @@ code {
   inset: 0;
   overflow: hidden;
   pointer-events: none;
+  background:
+    radial-gradient(ellipse at 25% 30%, var(--ambient), transparent 55%),
+    radial-gradient(ellipse at 78% 75%, var(--ambient-soft), transparent 50%),
+    var(--bg);
 }
 
 .atmosphere-dots {
@@ -233,11 +246,23 @@ code {
   overflow: visible;
 }
 
+.atmosphere-canvas {
+  visibility: hidden;
+}
+
+.atmosphere[data-ready='true'] .atmosphere-canvas {
+  visibility: visible;
+}
+
+.atmosphere[data-ready='true'] .atmosphere-fallback {
+  visibility: hidden;
+}
+
 /* ---------- Typography helpers ---------- */
 
 .kicker {
   color: var(--muted);
-  font-family: var(--font-serif);
+  font-family: var(--font-ui);
   font-size: 0.64rem;
   font-weight: 400;
   letter-spacing: 0.22em;
@@ -575,6 +600,15 @@ select {
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   min-height: 100vh;
+  background:
+    radial-gradient(ellipse at 18% 12%, var(--ambient), transparent 45%),
+    radial-gradient(ellipse at 92% 65%, var(--ambient-soft), transparent 48%),
+    linear-gradient(140deg, var(--bg), transparent 65%),
+    var(--bg);
+}
+
+.view-dashboard {
+  background: transparent;
 }
 
 .sidebar {
@@ -587,7 +621,10 @@ select {
   gap: 1.5rem;
   padding: 1.45rem 1rem 1.1rem;
   border-right: 1px solid var(--line);
-  background: transparent;
+  background: var(--glass-soft);
+  -webkit-backdrop-filter: blur(34px) saturate(1.3);
+  backdrop-filter: blur(34px) saturate(1.3);
+  box-shadow: inset -1px 0 0 var(--glass-highlight);
 }
 
 .brand {
@@ -645,7 +682,19 @@ select {
   border-color: var(--glass-border);
   background: var(--nav-active);
   color: var(--text);
-  box-shadow: inset 2px 0 0 var(--accent);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 3px 10px -5px var(--glass-edge);
+}
+
+.nav-item.active::after {
+  content: '';
+  float: right;
+  width: 4px;
+  height: 4px;
+  margin-top: 0.65rem;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .sidebar-foot {
@@ -720,9 +769,9 @@ select {
   justify-content: space-between;
   gap: 2rem;
   width: 100%;
-  max-width: 78rem;
+  max-width: 100rem;
   margin: 0 auto;
-  padding: 1.55rem 2.5rem 1rem;
+  padding: 1.15rem 2rem 0.9rem;
   border-bottom: 1px solid var(--line);
   background: transparent;
 }
@@ -770,9 +819,9 @@ select {
 
 .content {
   width: 100%;
-  max-width: 78rem;
+  max-width: 100rem;
   margin: 0 auto;
-  padding: 1.5rem 2.5rem 4rem;
+  padding: 1.25rem 2rem 1.5rem;
 }
 
 .content > * {
@@ -803,9 +852,12 @@ select {
   background:
     linear-gradient(135deg, var(--glass-sheen) 0%, transparent 44%),
     var(--glass);
-  box-shadow: var(--shadow-card), inset 0 1px 0 var(--glass-highlight);
-  -webkit-backdrop-filter: blur(26px) saturate(1.25);
-  backdrop-filter: blur(26px) saturate(1.25);
+  box-shadow:
+    var(--shadow-card),
+    inset 0 1px 0 var(--glass-highlight),
+    inset 0 -1px 0 var(--glass-edge);
+  -webkit-backdrop-filter: blur(34px) saturate(1.45);
+  backdrop-filter: blur(34px) saturate(1.45);
   transition:
     border-color 0.18s ease,
     box-shadow 0.18s ease;
@@ -814,6 +866,31 @@ select {
 .card:hover {
   border-color: var(--line-strong);
   box-shadow: var(--shadow-card), inset 0 1px 0 var(--glass-highlight);
+}
+
+.card::before,
+.metric::before,
+.login-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%23888' filter='url(%23n)' opacity='.8' d='M0 0h160v160H0z'/%3E%3C/svg%3E");
+  opacity: var(--grain-opacity);
+  pointer-events: none;
+}
+
+.card::after,
+.metric::after,
+.login-panel::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border: 1px solid transparent;
+  border-top-color: var(--glass-highlight);
+  border-left-color: var(--glass-sheen);
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 .card-head {
@@ -863,7 +940,7 @@ select {
 
 .hero-title {
   margin: 0.45rem 0 0.3rem;
-  font-size: clamp(2.35rem, 4.4vw, 3.5rem);
+  font-size: clamp(1.8rem, 3.2vw, 2.8rem);
   font-weight: 400;
   letter-spacing: 0.01em;
   line-height: 1.08;
@@ -930,10 +1007,11 @@ select {
 }
 
 .metric {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  min-height: 7.6rem;
+  min-height: 6.5rem;
   padding: 0.95rem 1rem;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
@@ -942,6 +1020,10 @@ select {
     var(--glass-soft);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
   backdrop-filter: blur(16px) saturate(1.2);
+  box-shadow:
+    var(--shadow-card),
+    inset 0 1px 0 var(--glass-highlight),
+    inset 0 -1px 0 var(--glass-edge);
   transition:
     transform 0.18s ease,
     border-color 0.18s ease,
@@ -1456,22 +1538,26 @@ td:first-child {
   justify-content: center;
   gap: 1.4rem;
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 2rem 1.25rem;
 }
 
 .login-panel {
   position: relative;
   z-index: 1;
-  width: min(25.5rem, 100%);
-  padding: clamp(1.7rem, 3.2vw, 2.5rem);
+  width: min(27rem, 100%);
+  padding: clamp(1.7rem, 3.2vw, 2.65rem);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-xl);
   background:
-    linear-gradient(135deg, var(--glass-sheen) 0%, transparent 46%),
-    var(--glass-strong);
-  box-shadow: var(--shadow-panel), inset 0 1px 0 var(--glass-highlight);
-  -webkit-backdrop-filter: blur(32px) saturate(1.2);
-  backdrop-filter: blur(32px) saturate(1.2);
+    linear-gradient(130deg, var(--glass-sheen), transparent 45%, var(--glass-soft)),
+    var(--glass);
+  box-shadow:
+    var(--shadow-panel),
+    inset 0 1px 0 var(--glass-highlight),
+    inset 0 -1px 0 var(--glass-edge);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+  backdrop-filter: blur(28px) saturate(1.5);
   animation: panel-in 0.6s cubic-bezier(0.22, 0.8, 0.3, 1) both;
 }
 
@@ -1982,6 +2068,476 @@ td:first-child {
 @media (max-width: 360px) {
   .grid.metrics {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Viewport composition ---------- */
+
+.app-shell {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.main-area {
+  height: 100%;
+  min-height: 0;
+}
+
+.topbar {
+  flex: none;
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.dashboard-page {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: clamp(0.65rem, 1.6vh, 1.15rem);
+}
+
+/* An opacity-animated parent becomes a backdrop root and prevents its cards
+   from blurring the shared dot field behind the dashboard. */
+.content > .dashboard-page {
+  animation: none;
+}
+
+.dashboard-page:has(> .notice) {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.dashboard-page .hero-card {
+  align-items: center;
+  gap: 1rem;
+  padding: clamp(1rem, 2.5vh, 1.6rem);
+}
+
+.dashboard-page .hero-title {
+  margin: 0.4rem 0 0.35rem;
+}
+
+.dashboard-page .hero-side {
+  gap: 0.75rem;
+}
+
+.dashboard-page .section {
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.6rem;
+}
+
+.dashboard-page .section-head {
+  align-items: center;
+}
+
+.dashboard-page .section-title {
+  font-size: 1.1rem;
+}
+
+.dashboard-page .metrics {
+  min-height: 0;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+
+.dashboard-page .metric {
+  min-height: 0;
+  justify-content: center;
+  padding: clamp(0.75rem, 1.8vh, 1.15rem);
+}
+
+.dashboard-page .metric-value {
+  font-size: clamp(1.6rem, 3.7vh, 2.65rem);
+  margin: 0.12rem 0;
+}
+
+.dashboard-page .metric-hint {
+  margin-top: 0.2rem;
+}
+
+.dashboard-page .ack-card {
+  padding: 1rem 1.25rem;
+}
+
+.dashboard-page .card-head {
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.55rem;
+}
+
+.dashboard-page .ack {
+  padding: 0.6rem 0.8rem;
+}
+
+.dashboard-page .ack-card .fine-print {
+  margin-top: 0.55rem;
+}
+
+.dashboard-page .ack-card .empty {
+  padding: 0.6rem;
+}
+
+@media (min-width: 961px) {
+  .sidebar {
+    height: 100%;
+  }
+
+  .content {
+    overflow: hidden;
+  }
+
+  .content > .stack:not(.dashboard-page) {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .content > .card,
+  .content > .stack:not(.dashboard-page) > .card {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .card-head,
+  .pager {
+    flex: none;
+  }
+
+  .card > .list,
+  .card > .table-wrap {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .card > .list {
+    align-content: start;
+  }
+
+  .table-wrap th {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    background: var(--bg);
+  }
+
+  .control-layout {
+    flex: 1;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr) minmax(17rem, 21rem);
+    gap: 1.5rem;
+    overflow: auto;
+  }
+
+  .control-copy {
+    gap: 0.9rem;
+  }
+}
+
+@media (min-width: 961px) and (max-height: 740px) {
+  .topbar {
+    padding-top: 0.8rem;
+    padding-bottom: 0.7rem;
+  }
+
+  .topbar-heading h1 {
+    font-size: 1.65rem;
+  }
+
+  .content {
+    padding-top: 0.85rem;
+    padding-bottom: 0.95rem;
+  }
+
+  .dashboard-page .hero-title {
+    font-size: clamp(1.7rem, 2.8vw, 2.25rem);
+  }
+
+  .dashboard-page .ack-card {
+    padding: 0.75rem 1rem;
+  }
+
+  .dashboard-page .metric {
+    gap: 0.2rem;
+  }
+
+  .dashboard-page .metric-value {
+    font-size: 1.85rem;
+  }
+
+  .control-stage {
+    min-height: 0;
+  }
+}
+
+@media (min-width: 961px) and (max-width: 1180px) {
+  .dashboard-page .metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .dashboard-page .hero-card {
+    grid-template-columns: minmax(0, 1fr) minmax(12rem, auto);
+  }
+
+  .hero-side .pill-row {
+    justify-content: flex-end;
+  }
+
+  .metric-hint {
+    font-size: 0.58rem;
+  }
+}
+
+@media (max-width: 960px) {
+  .app-shell {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .topbar {
+    padding: 0.8rem 1.1rem;
+  }
+
+  .content {
+    padding: 0.85rem 1.1rem 1rem;
+  }
+
+  .view-dashboard .content {
+    scrollbar-gutter: auto;
+  }
+
+  .dashboard-page {
+    height: 100%;
+    min-height: 0;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .dashboard-page .metrics {
+    grid-template-rows: repeat(4, minmax(0, 1fr));
+  }
+
+  .dashboard-page .metric-value {
+    font-size: 1.65rem;
+  }
+
+  .dashboard-page .metric-hint {
+    font-size: 0.59rem;
+  }
+
+  .dashboard-page .hero-title {
+    font-size: clamp(1.65rem, 3.5vw, 2.25rem);
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboard-page {
+    gap: 0.65rem;
+  }
+
+  .dashboard-page .hero-card {
+    gap: 0.6rem;
+    padding: 0.9rem 1rem;
+  }
+
+  .dashboard-page .hero-title {
+    margin: 0.25rem 0;
+  }
+
+  .dashboard-page .hero-side {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .dashboard-page .hero-actions > .fine-print {
+    display: none;
+  }
+
+  .dashboard-page .hero-side .pill-row {
+    gap: 0.25rem;
+  }
+
+  .dashboard-page .hero-side .pill {
+    gap: 0.25rem;
+    padding: 0.15rem 0.35rem;
+    font-size: 0.58rem;
+  }
+
+  .dashboard-page .hero-meta {
+    font-size: 0.68rem;
+  }
+
+  .dashboard-page .section-head {
+    flex-direction: row;
+  }
+
+  .dashboard-page .section-note {
+    max-width: 12rem;
+    font-size: 0.58rem;
+    text-align: right;
+  }
+
+  .dashboard-page .metric {
+    padding: 0.65rem 0.8rem;
+    gap: 0.2rem;
+  }
+
+  .dashboard-page .ack-card {
+    padding: 0.8rem 1rem;
+  }
+
+  .dashboard-page .ack {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .dashboard-page .ack-main {
+    gap: 0.35rem;
+  }
+
+  .dashboard-page .ack-command {
+    font-size: 1.05rem;
+  }
+
+  .dashboard-page .ack-meta {
+    gap: 0;
+    font-size: 0.62rem;
+    max-width: 52%;
+    overflow-wrap: anywhere;
+    text-align: right;
+  }
+
+  .dashboard-page .ack-card .fine-print {
+    font-size: 0.6rem;
+    line-height: 1.5;
+  }
+}
+
+@media (max-width: 560px) {
+  .topbar {
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.65rem 0.9rem;
+  }
+
+  .topbar-heading h1 {
+    font-size: 1.4rem;
+  }
+
+  .topbar-meta {
+    width: auto;
+    justify-content: flex-end;
+    gap: 0.7rem;
+  }
+
+  .topbar-time {
+    font-size: 0.78rem;
+  }
+
+  .content {
+    padding: 0.65rem 0.75rem 0.75rem;
+  }
+
+  .dashboard-page .card-head {
+    flex-direction: row;
+    margin-bottom: 0.45rem;
+    padding-bottom: 0.4rem;
+  }
+
+  .dashboard-page .grid.metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-page .metric {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-content: center;
+    align-items: center;
+    padding: 0.45rem 0.6rem;
+    gap: 0.15rem 0.3rem;
+  }
+
+  .dashboard-page .metric-label {
+    font-size: 0.6rem;
+  }
+
+  .dashboard-page .metric-value {
+    margin: 0;
+    font-size: 1.35rem;
+  }
+
+  .dashboard-page .metric-hint {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 0.55rem;
+  }
+}
+
+@media (max-width: 760px) and (max-height: 740px) {
+  .sidebar {
+    gap: 0.35rem 0.75rem;
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+  }
+
+  .dashboard-page .hero-card {
+    padding: 0.65rem 0.8rem;
+    gap: 0.4rem;
+  }
+
+  .dashboard-page .hero-title {
+    font-size: 1.5rem;
+  }
+
+  .dashboard-page .ack-card {
+    padding: 0.6rem 0.8rem;
+  }
+
+  .dashboard-page .ack {
+    padding: 0.4rem 0.5rem;
+  }
+
+  .dashboard-page .ack-meta {
+    font-size: 0.55rem;
+  }
+
+  .dashboard-page .metric {
+    padding: 0.3rem 0.5rem;
+  }
+
+  .dashboard-page .metric-value {
+    font-size: 1.15rem;
+  }
+
+  .dashboard-page .metric-unit {
+    font-size: 0.52rem;
+  }
+}
+
+/* Preserve access at extreme window heights / browser zoom instead of clipping. */
+@media (max-height: 600px) {
+  .content,
+  .sidebar {
+    overflow-y: auto;
+  }
+
+  .dashboard-page {
+    min-height: 32rem;
   }
 }
 

@@ -73,7 +73,7 @@ export function Shell({
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell view-${active}`}>
       <aside className="sidebar">
         <div className="brand">
           <strong>SCOUT</strong>
