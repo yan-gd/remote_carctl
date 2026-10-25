@@ -11,6 +11,8 @@ import { DashboardPage } from './pages/DashboardPage';
 import { InspectionPage } from './pages/InspectionPage';
 import { LoginPage } from './pages/LoginPage';
 import { LogsPage } from './pages/LogsPage';
+import { CameraPage } from './pages/CameraPage';
+import { NavigationPage } from './pages/NavigationPage';
 import { RobotProvider } from './robot/RobotContext';
 
 export default function App() {
@@ -96,8 +98,11 @@ export default function App() {
           active={tab}
           onNavigate={setTab}
           onLogout={logout}
+          onStop={async () => { await api.control('STOP'); }}
         >
           {tab === 'dashboard' && <DashboardPage />}
+          {tab === 'camera' && <CameraPage api={api} />}
+          {tab === 'navigation' && <NavigationPage api={api} role={user.role} />}
           {tab === 'inspection' && <InspectionPage api={api} role={user.role} />}
           {tab === 'control' && <ControlPage api={api} role={user.role} />}
           {tab === 'alarms' && <AlarmsPage api={api} role={user.role} />}

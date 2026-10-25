@@ -1,6 +1,6 @@
 # exp3 项目进度与 Agent 交接
 
-更新时间：2026-10-24（Asia/Singapore）。本文记录代码状态、用户提供的现场结果和后续工作边界，供后续 Agent 接续；不是完整测试报告。**第 13 节记录最新中文字体和 Dashboard 背景调整；第 12 节为前一轮视觉优化，第 11 节保留此前线上部署状态。** 部署命令统一见 [README 的 Quick Start](README.md#3-quick-start服务器--小车端)。
+更新时间：2026-10-25（Asia/Singapore）。本文记录代码状态、用户提供的现场结果和后续工作边界，供后续 Agent 接续；不是完整测试报告。**第15节为最新自主巡逻/原生TF兼容/真实Broker验证；第14节保留首轮实现与硬件调查，前台续约设计已被15节替代；更早章节为历史。** 原有部署见 [README 的 Quick Start](README.md#3-quick-start服务器--小车端)，新增能力见 [NAVIGATION-CAMERA.md](docs/NAVIGATION-CAMERA.md)。
 
 ## 1. 接手时先知道这些
 
@@ -426,3 +426,95 @@ bash frontend/deploy/smoke-test.sh agilex.yoyoyan.cn
 - 浏览器确认：登录与 Dashboard 各有 1 个点阵 Canvas，控制页为 0；Dashboard 动画持续变化。生产预览在严格 CSP 下无页面/CSP 错误、无内联样式，8 项遥测完整显示。
 
 本节依旧只记录本地模拟数据验收，随本次界面改动一并提交；远程同步状态以 Git 为准。**尚未部署此版本到服务器**，后续部署需按用户指令执行并验证。
+
+## 14. 目标点导航、多点巡逻、D435 内存转发（2026-10-25）
+
+### 14.1 当前授权与硬件证据
+
+用户明确追加了两项功能：云端设定目标点、小车自行前往和多点巡逻；摄像头取流、照片/视频供 Web 查看，**服务器传输后丢弃媒体**。这次授权取代先前“不做导航/摄像头”和“只美化、不改业务逻辑”的范围限制；未授权额外公网服务、重装 ROS、改数据库类型或自动实际运动。
+
+- 摄像头已由用户确认：**RealSense D435**。
+- 本地资料：`E:/qq157/Downloads/SCOUT MINI Pro 科研教育套装开发手册(重庆大学定制新版).pdf`，50 页。第 1 页套装含 AGX Xavier、RS-Helios-16P、D435、CH110；第 23–25 页 D435，第 30–35 页建图、定位、`navigation_4wd.launch` 和多点导航。
+- 用户回答：**还没试过／不确定 RViz 地图、定位、2D Nav Goal 是否成功**。因此硬件方案可行，但不能说现场导航已就绪。后端 `PATROL_NAVIGATION_ENABLED` 和小车 `navigation.enabled` 均默认 false。
+- 随后现场只读结果：`realsense2_camera` 在 `~/catkin_ws/src/realsense/realsense-ros/realsense2_camera`，`move_base` 在 `~/catkin_ws/src/nav2/navigation/move_base`；目前运行话题只有底盘/odom/tf。存在 `scout_description/maps/map.pgm`，yaml分辨率0.05、origin(-100,-100,0)，**未验证属于当前场地**。
+- 原 `navigation_4wd.launch` 同时启动 move_base/map_server/amcl/RViz、yocs smoother、底盘；`open_rslidar.launch` 另含 RF2O里程计和显示模型。原AMCL/costmap的base_footprint与实际底盘base_link不一致。新独立入口避免双底盘/双odom、统一base_link，并修正插件层/扫描源命名空间。
+- D435 USB已检测到 `8086:0b07`。用户执行过 `rs_camera.launch`，随后**主动关闭了终端**；相机话题为空、相机节点不存在和master Connection refused均发生在关闭后，不能据此判驱动故障。已请求保持相机窗口运行并另开终端查询topic与图像header，尚待有效运行证据。
+- 旧的宝塔纳管问题：用户提供 panel 11.8.1、sites/domain 记录均 `[]`；没有收到纳管成功反馈。媒体部署必须先检查实际生效 vhost，不能盲目覆盖 `agilex...conf` 或 `html_agilex...conf`。
+
+### 14.2 已实现的本地代码
+
+| 范围 | 位置 / 行为 |
+| --- | --- |
+| 导航模型、Gateway | `backend/exp2-domain/.../NavigationOrder.java`、`NavigationReport.java`、`gateway/RobotGateway.java` / `RobotListener.java` |
+| 导航应用用例 | `backend/exp2-app/.../NavigationService.java`；OPERATOR 启动、拥有者续约、OPERATOR/MONITOR 取消、审计；地图指纹、点位/轮次、冲突和租约校验；先发既有 STOP 再取消 |
+| 导航状态与 MQTT | `RobotMonitor.java`、`infrastructure/mqtt/NavigationMessages.java` / `MqttRobotGateway.java`；两个新增导航 topic，共用 manual session/seq，3 秒过期、不 retained；Broker 等待不占住 STOP 发布锁 |
+| 小车导航 | `robot-bridge/scout_navigation.py`、`scout_bridge_core.py`、`scout_mqtt_bridge.py`；真实 ROS1 move_base action、顺序点位/有限轮次；传感器/定位/地图/action/独占 cmd_vel 检查；后台健康检查缓存超时拒绝；云端租约过期/手动覆盖/断线关闭速度门 |
+| 视频转发 | `backend/exp2-app/.../CameraRelay.java`、`backend/start/.../web/CameraController.java`；384KiB/帧、每连接单帧队列、最多8连接，无历史/文件/DB；snapshot 等下一帧；流每55秒换连接 |
+| 摄像头上传 | `robot-bridge/scout_camera_uplink.py`；真实 ROS CompressedImage，检查时间戳，或显式 UVC/ffmpeg stdout；单帧队列、HTTPS+独立设备密钥，无文件；不使用 Python3 cv_bridge |
+| 摄像头 systemd | `robot-bridge/scout-camera-uplink.service`、`run-camera-uplink.sh`；agilex 用户、独立 env；不自动重写底盘/相机/导航驱动服务 |
+| 实机导航入口 | `robot-bridge/launch/cloud_sensors.launch` / `cloud_navigation.launch`；地图必填、无额外底盘/RF2O/平滑器；AMCL/costmap统一base_link、显式插件层/scan；桥接每次启动或地图变化后需重新在RViz设置初始位姿 |
+| Web | `frontend/src/pages/NavigationPage.tsx` / `CameraPage.tsx`、`camera/frameStream.ts`、API/导航/日志入口；现有登录/手动控制保留。照片/短视频在浏览器内存预览、可下载到用户电脑；断流不继续录制旧图；退出释放 URL/连接 |
+| 代理 | `frontend/deploy/camera-relay.conf`；关闭请求/响应缓冲、缓存、媒体临时文件和访问日志；CSP 新增 img/media 的 blob:，保留其他限制 |
+| 实机检查与文档 | `scripts/robot_preflight.py`（只读，Python2/3）；`docs/NAVIGATION-CAMERA.md`（完整部署、降级、实车验收），README 入口更新 |
+
+没有增加 Maven、npm 或 pip 生产依赖。SQLite 结构和已有数据不改动。导航点位/会话仅内存，原“路线/任务”仍是业务计划，不自动下发或伪造完成。导航要求浏览器前台监管、每秒续约，**不是后台无人监管巡逻**。影像是 HTTPS JPEG 帧流，不是 RTSP/WebRTC，也不保存服务器录像。
+
+### 14.3 本轮实际验证（本地）
+
+| 检查 | 结果 |
+| --- | --- |
+| `mvn clean test` | BUILD SUCCESS，33.903s；114项中113通过、1项条件跳过（MQTT_TEST_URL 未设置，本机没有运行真实 Broker） |
+| `mvn clean install` | BUILD SUCCESS，45.822s；同样113通过、1跳过；可运行 JAR 已生成 |
+| JaCoCo 聚合 | `backend/start/target/site/jacoco-aggregate/index.html`；指令91.63%（7442/8122）、分支80.50%（578/718）、行90.72%（1437/1584）、方法92.80%（361/389） |
+| Python 桥接 | 60项全部通过，当前本机 Python3.13；另做所有生产脚本 Python3.7语法解析。**没有声称本轮在实际 Melodic/Python3.7 跑过** |
+| 前端 | 20项全部通过；TypeScript + Vite production build 通过（最终 bundle 以 dist 为准） |
+| 真 HTTP、本地独立 JAR/临时SQLite | 7项PASS：JWT/设备密钥、Swagger、帧写入→流读取、snapshot只取新帧、断流503、无硬件默认禁导航、隔离数据库目录无媒体文件；进程已退出。测试源图为生成的测试图片 |
+| 浏览器 | 1440×900 / 390×844 新页面与权限提示；测试图像解码、照片Blob预览、浏览器短视频编码/播放；桌面实时画面与拍摄预览分栏。响应由本地测试拦截提供，**没有控制真实机器人** |
+| 生产前端 + CSP | 最终构建 `index-CqmVJye4.js` / `index-DXQdKB2F.css`；4173 本地 production preview 注入更新后的严格 CSP；测试图像、Blob照片、浏览器视频播放成功，0页面异常、0CSP违规（随后仅追加初始位姿提示文字） |
+
+本轮日志/截图位于被 Git 忽略的 `verification/`（`maven-test.log`、`maven-install.log`、`bridge-tests.log`、`frontend-tests.log`、`camera-http-report.json` 等）。旧测试报告的98项/真实Broker证据属于2026-10-23，不能冒充本轮重新执行。
+
+### 14.4 后续 Agent 必须继续的事项
+
+1. 先 `git status`：本轮代码在工作区，**尚未提交、推送或部署**。基线 HEAD 为 `c355c89`；不要覆盖这批修改或现场密码。按用户指令安排同步。
+2. 小车只读检查已取得launch/地图参数/底盘帧关系（14.1），还需真实scan/costmap/camera话题、当前场地地图和定位证据。首次包未找到源自命令合成一行；正确source工作区后已找到scout_bringup。后续给用户诊断命令使用有分隔符的单行或可复制代码块。
+3. 先按手册在 RViz 完成真实建图/定位和单点到达，再隔离 move_base 速度到 `/navigation/cmd_vel`，只有桥接发布底盘 `/cmd_vel`；确认 footprint/避障参数和初始位姿正确后才开两个导航开关。
+4. 部署独立设备密钥、Nginx media snippet/CSP、D435 ROS RGB 压缩图像上传服务，确认真实 Web 画面、拍照/录像和断流行为。现有摄像头驱动服务是否存在尚未知，不擅自创建重复驱动。
+5. 真正测量 STOP、失焦、断 MQTT、定位/雷达失效停车，单点/多点到达，整机重启恢复；复查 Nginx/WAF/CDN 不保存正文或媒体临时文件。**这些现场条件未完成，整体目标不能记为完成。**
+
+用户提供手册和“尚未验证导航”的回复并不是授权删除旧地图或立即驱动小车。没有用户回传前，保留安全降级和真实未就绪状态；不要生成假心跳、假相机画面或假导航到达结果来通过验收。
+
+## 15. 自主巡逻与视频并行、TF解释器兼容、真实Broker（2026-10-25续）
+
+上一目标轮次属于实际进展：新增了代码、部署材料和本地验证证据。本轮继续审查后修正了会影响最终使用的两处接入问题：
+
+- **自主巡逻独立于浏览器页面**：原前台死手柄会在切到摄像头时取消导航，现由后端 `NavigationService.renewLease()` 每秒根据本机器人/本任务的新鲜ACTIVE/PENDING报告续约；页面切换、失焦、关闭不取消已授权的有限巡逻。后端停止/重启、MQTT失联、过期未确认、权限撤销时不续约，机器人3秒本地租约停车。真实终态结束续约并记录NAVIGATION_END，原数据库patrol_task不伪造完成。全局“立即停止”在所有页面对OPERATOR/MONITOR可见；退出登录沿用尽力STOP。
+- 删除了不再需要的浏览器keepalive接口，当前为 **27个API操作**（20既有+3导航+4摄像头）。状态增加active/missionId/ownerId。手动按住控制原有失焦/松手看门狗继续保留。
+- **Melodic原生TF与Python3隔离**：官方 `tf2_ros.Buffer` 依赖原生tf2_py，不能假定系统Python2扩展能被Conda Python3加载。新增 `robot-bridge/ros1_tf_pose.py`，由桥接用配置中的系统Python2.7自动启动，从真实TF读取map→base_link并转发PoseStamped；Python3导航适配器订阅 `navigation.pose_topic`（默认 `/patrol/navigation_pose`）。辅助进程不发布运动/odom/假位姿；退出、陈旧或无效位姿时导航未就绪。`scripts/robot_preflight.py` 分别检查原生TF与Python3 action消息导入。**这仍需现场验证，不是已在Xavier通过的结果。**
+- 新增可选 `scout-d435.service` / `run-d435.sh`，复用系统ROS master（roslaunch --wait）并保持相机在关闭终端后运行；现有相机服务存在时不重复安装。摄像头上传仍是独立服务。
+- 桥接退出先关闭命令入口、输出零速度，再等待辅助进程清理；退出期间迟到的FORWARD/导航包被忽略，避免清理等待延迟手动停车。
+
+本轮新增/修改的关键位置：`NavigationService.java`、`NavigationController.java`、`application.properties`（调度池2线程）、`NavigationPage.tsx`、`Layout.tsx` / `App.tsx`、`scout_navigation.py`、`ros1_tf_pose.py`、`scout_bridge_core.py`、相机服务文件；部署步骤以 `docs/NAVIGATION-CAMERA.md` 当前内容为准。
+
+### 15.1 最新实际测试
+
+| 检查 | 结果与证据 |
+| --- | --- |
+| `mvn clean test` | BUILD SUCCESS，51.463s，118项全部通过、0跳过；本机真实amqtt0.12.1仅监听127.0.0.1:18883，包含导航command/status往返、共享seq/session和原有机器人消息 |
+| `mvn clean install` | BUILD SUCCESS，44.083s，同样118项全部通过；Java可运行JAR已生成 |
+| JaCoCo最终聚合 | `backend/start/target/site/jacoco-aggregate/index.html`；行94.59%（1522/1609）、分支84.01%（620/738）、指令95.54%（7860/8227）、方法95.91%（375/391） |
+| 桥接 | 本机Python3.13，65项通过；含原生TF转发的新鲜/无效数据、helper退出拒绝、清理前零速、退出期间命令拒绝；不是实机ROS执行证明 |
+| 前端 | 22项通过，TypeScript/Vite构建通过；最终 `index-CLcdFeQk.js` / `index-CHTZsxrC.css` |
+| 独立JAR真实HTTP | 最新JAR+临时SQLite，摄像头7项验证再次通过，见 `verification/camera-http-report.json`；使用生成测试图像，进程已退出 |
+| 浏览器生产预览 | 严格CSP无违规；受控API夹具验证启动后切到摄像头未发送CANCEL/STOP，主动全局STOP发出一次；390×844无横向溢出，停止按钮可见。没有调用真实小车 |
+
+测试Broker及依赖都在被忽略的 `verification/`，未加入生产依赖。旧pip解析器发生CPU空转，切换到已有uv后测试环境安装成功；生产requirements不受影响。旧轮次“113通过/1跳过、60桥接、20前端”仅保留在14节历史，不是最新结果。
+
+验证结束后已关闭本机测试Broker、Vite开发/预览进程并移除浏览器API拦截夹具；安装临时目录已可恢复地归档到被忽略的 `verification/pip-leftovers`。后续运行真实Broker测试需重新启动127.0.0.1:18883的测试Broker，或设置自己的MQTT_TEST_URL；不要拿历史READY日志当当前进程仍在运行。
+
+### 15.2 当前现场状态与下一步
+
+- 用户再次查询相机时仍未给出图像header；随后询问开启命令，已提供：`source /opt/ros/melodic/setup.bash && source "$HOME/catkin_ws/devel/setup.bash" && /usr/bin/python2.7 /opt/ros/melodic/bin/roslaunch --screen realsense2_camera rs_camera.launch`。应保持该窗口运行，另开终端检查相机topic和header。不要把先前主动关闭终端后的空结果解释为驱动故障。
+- 服务器无交互SSH检查已尝试一次：`BatchMode=yes` 返回 `Permission denied (publickey,password)`。本地Agent没有完成服务器登录或部署；不要索要用户明文密码，让用户在自己终端执行部署并回传结果。
+- 当前代码仍在工作区，未提交/推送/部署；以git状态为准。保留现场MQTT config.yaml、backend.env、SQLite及jwt-key。所有导航开关默认false。
+- 完成目标仍需要：D435真实帧→HTTPS→Web验收；当前场地地图确认/必要建图、RViz初始定位和真实单点/多点到达；STOP、后端/MQTT断线与定位失效停车测量；真实Nginx媒体无临时文件；相关服务现场安装与重启恢复。未取得这些证据前不要标记整体目标完成。

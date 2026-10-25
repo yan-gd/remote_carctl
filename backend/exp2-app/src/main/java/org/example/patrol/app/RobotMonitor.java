@@ -40,6 +40,19 @@ public class RobotMonitor implements RobotListener {
     private Instant lastAckAt;
     private boolean online;
     private boolean batteryLow;
+    private NavigationReport navigation;
+    private Instant navigationAt;
+
+    @Override
+    public synchronized void onNavigation(NavigationReport report) {
+        navigation = report;
+        navigationAt = clock.instant();
+    }
+
+    public synchronized NavigationReport navigation() {
+        return isOnline(clock.instant()) && navigationAt != null
+                && !clock.instant().isAfter(navigationAt.plus(settings.heartbeatTimeout())) ? navigation : null;
+    }
 
     public RobotMonitor(
             RobotGateway gateway, AlarmGateway alarms, RobotSettings settings, Clock clock) {

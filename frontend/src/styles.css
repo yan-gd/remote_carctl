@@ -2073,6 +2073,84 @@ td:first-child {
 
 /* ---------- Viewport composition ---------- */
 
+.camera-stage {
+  position: relative;
+  min-height: 12rem;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: #11171c;
+}
+
+.camera-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: 52vh;
+  object-fit: contain;
+}
+
+.camera-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #11171c;
+  color: #c4cbd3;
+  font-size: 0.85rem;
+}
+
+.camera-actions {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 0.8rem 0;
+}
+
+.camera-captures {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.camera-captures figure { margin: 0; flex: 1; min-width: 12rem; }
+.camera-captures img, .camera-captures video { width: 100%; max-height: 16rem; object-fit: contain; }
+.view-camera .content { overflow: auto; }
+.view-camera .content > .stack { height: auto; }
+.view-navigation .content { overflow: auto; }
+.view-navigation .content > .stack { height: auto; }
+.navigation-readout { margin: 1rem 0; }
+.navigation-readout dd { font-size: 0.9rem; overflow-wrap: anywhere; }
+.navigation-cycles { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
+.navigation-cycles input { width: 4.5rem; }
+.global-control-notice { position: fixed; bottom: 1rem; right: 1rem; max-width: min(28rem, calc(100vw - 2rem)); z-index: 100; pointer-events: none; box-shadow: var(--shadow-card); }
+
+@media (min-width: 1100px) {
+  .view-camera .content > .camera-page.has-captures {
+    display: grid;
+    grid-template-columns: minmax(0, 1.8fr) minmax(16rem, 1fr);
+    height: 100%;
+    gap: 1rem;
+  }
+  .view-camera .camera-stage {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    min-height: 12rem;
+  }
+  .view-camera .camera-captures {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    min-height: 0;
+    overflow: auto;
+  }
+  .view-camera .camera-captures figure { display: flex; flex: none; flex-direction: column; gap: 0.5rem; }
+  .view-camera .camera-captures img,
+  .view-camera .camera-captures video { display: block; height: clamp(8rem, 26vh, 15rem); max-height: 28vh; }
+}
+
 .app-shell {
   height: 100vh;
   height: 100dvh;

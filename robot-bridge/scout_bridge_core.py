@@ -51,6 +51,10 @@ DEFAULT_CONFIG = {
         "status_topic": "/scout_status",
     },
     "sim": {"battery_voltage": None},
+    "navigation": {"enabled": False, "action": "/move_base", "frame": "map", "base_frame": "base_link",
+                   "pose_topic": "/patrol/navigation_pose", "pose_python": "/usr/bin/python2.7",
+                   "map_topic": "/map", "scan_topic": "/scan", "costmap_topic": "/move_base/local_costmap/costmap",
+                   "velocity_topic": "/navigation/cmd_vel", "max_linear": 0.2, "max_angular": 0.4, "goal_timeout": 180},
 }
 
 
@@ -91,6 +95,20 @@ def _validate(config):
     if not isinstance(config["robot_id"], str) or not _ROBOT_ID.match(config["robot_id"]):
         raise ConfigError("robot_id must be 1-64 letters, digits, '_' or '-' (it is part of every topic)")
     mqtt = config["mqtt"]
+    for key in ('username', 'password'):
+        if mqtt[key] is not None and not isinstance(mqtt[key], str):
+            raise ConfigError('mqtt.%s must be a quoted string' % key)
+    nav = config['navigation']
+    if not isinstance(nav['enabled'], bool):
+        raise ConfigError('navigation.enabled must be boolean')
+    for key in ('action', 'frame', 'base_frame', 'map_topic', 'scan_topic', 'costmap_topic', 'velocity_topic', 'pose_topic', 'pose_python'):
+        if not isinstance(nav[key], str) or not nav[key]:
+            raise ConfigError('navigation.%s must be nonempty' % key)
+    if nav['velocity_topic'] == config['ros']['cmd_vel_topic']:
+        raise ConfigError('Navigation velocity must be isolated from chassis cmd_vel')
+    _number(config, 'navigation', 'max_linear', 0.01, 0.3)
+    _number(config, 'navigation', 'max_angular', 0.01, 0.6)
+    _number(config, 'navigation', 'goal_timeout', 10, 600)
     if not isinstance(mqtt["host"], str) or not mqtt["host"].strip():
         raise ConfigError("mqtt.host must be the broker address")
     _number(config, "mqtt", "port", 1, 65535, integer=True)
@@ -319,6 +337,9 @@ class BridgeCore(object):
         self._link = None
         self._link_down_since = None
         self._next_link_warning = None
+        self.navigation = None
+        self._command_lock = threading.RLock()
+        self._shutting_down = False
 
     def bind(self, link):
         self._link = link
@@ -326,18 +347,28 @@ class BridgeCore(object):
     # --- MQTT side (paho network thread) -------------------------------------------------
 
     def on_connected(self):
+        if self._shutting_down:
+            return
         LOG.info("MQTT connected, listening on %s", self.topics["control"])
         self._link.subscribe(self.topics["control"], 1)
+        self._link.subscribe('robot/%s/navigation/command' % self.robot_id, 1)
         self._publish_heartbeat()
         self._next_status = None  # full state on the next cycle, not up to a period later
 
     def on_disconnected(self):
+        if self.navigation:
+            self.navigation.cancel('MQTT_DISCONNECTED')
         if self.motion.state != "STOPPED":
             LOG.warning("MQTT connection lost while %s: stopping", self.motion.state)
         self.motion.halt()
         self._send(0.0, 0.0)
 
     def on_control(self, payload, retained=False):
+        with self._command_lock:
+            if not self._shutting_down:
+                self._control(payload, retained)
+
+    def _control(self, payload, retained=False):
         if retained:
             LOG.warning("ignoring a retained control message: commands must be live")
             return
@@ -358,6 +389,8 @@ class BridgeCore(object):
         if not self.sequence.accept(session, seq):
             LOG.debug("dropping duplicate or out-of-order control seq=%s", seq)
             return
+        if self.navigation:
+            self.navigation.cancel('MANUAL_OVERRIDE')
         self._send(*self.motion.apply(command))
         self._ack(seq, session, command, "APPLIED", None)
 
@@ -365,7 +398,8 @@ class BridgeCore(object):
 
     def step(self):
         """One control cycle: watchdog, /cmd_vel, heartbeat and status when due."""
-        velocity = self.motion.tick()
+        navigating = self.navigation.tick() if self.navigation else False
+        velocity = None if navigating else self.motion.tick()
         if velocity is not None:
             self._send(*velocity)
         now = self._clock()
@@ -375,12 +409,39 @@ class BridgeCore(object):
         if self._next_status is None or now >= self._next_status:
             self._publish(self.topics["status"], self.status_message(), 0)
             self._next_status = now + self._status_period
+            if self.navigation:
+                report = dict(self.navigation.report(), robot_id=self.robot_id)
+                self._publish('robot/%s/navigation/status' % self.robot_id, report, 0)
+
+    def on_navigation(self, payload, retained=False):
+        with self._command_lock:
+            if not self._shutting_down:
+                self._navigation(payload, retained)
+
+    def _navigation(self, payload, retained=False):
+        if retained or not self.navigation:
+            return
+        message = _parse(payload)
+        if not message or message.get('robot_id') != self.robot_id:
+            return
+        seq, session = message.get('seq'), message.get('session')
+        if not isinstance(seq, int) or isinstance(seq, bool) or seq < 1 or not isinstance(session, str) or len(session) > 64:
+            return
+        if not self.sequence.accept(session, seq):
+            return
+        self.motion.halt()
+        self.navigation.command(message)
 
     def shutdown(self):
         """Stop the robot and tell the backend this is a planned exit, not a crash."""
-        self.motion.halt()
-        for _ in range(3):
-            self._send(0.0, 0.0)
+        # Close command admission and stop manual motion BEFORE waiting for a helper process.
+        with self._command_lock:
+            self._shutting_down = True
+            self.motion.halt()
+            for _ in range(3):
+                self._send(0.0, 0.0)
+        if self.navigation:
+            self.navigation.shutdown()
         payload = {"robot_id": self.robot_id, "online": False, "reason": "SHUTDOWN", "timestamp": self._now_ms()}
         if self._link is not None and self._link.connected:
             self._link.publish(self.topics["heartbeat"], _dumps(payload), 1, wait=1.0)
@@ -485,6 +546,7 @@ class MqttLink(object):
     as its last will, so the backend learns about a crash or network loss right away."""
 
     def __init__(self, mqtt_config, robot_id, on_connected, on_disconnected, on_control, paho=None):
+        self._robot_id = robot_id
         if paho is None:
             import paho.mqtt.client as paho  # imported lazily: the core tests do not need it
         self._config = mqtt_config
@@ -509,6 +571,7 @@ class MqttLink(object):
         self._client.on_connect = self._handle_connect
         self._client.on_disconnect = self._handle_disconnect
         self._client.on_message = self._handle_message
+        self.navigation_handler = None
 
     def start(self):
         """Connect in the background; paho keeps retrying until the broker is reachable."""
@@ -548,3 +611,5 @@ class MqttLink(object):
     def _handle_message(self, client, userdata, message):
         if message.topic == self._topics["control"]:
             self._on_control(message.payload, bool(message.retain))
+        elif message.topic == 'robot/%s/navigation/command' % self._robot_id and self.navigation_handler:
+            self.navigation_handler(message.payload, bool(message.retain))

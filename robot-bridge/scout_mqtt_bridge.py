@@ -279,7 +279,11 @@ def main(argv=None):
     telemetry = TelemetryCache(config["telemetry"]["chassis_timeout"])
     adapter = make_adapter(kind, config, telemetry)
     core = BridgeCore(config, adapter, telemetry, adapter.name)
+    if config['navigation']['enabled']:
+        from scout_navigation import build_navigation
+        core.navigation = build_navigation(config['navigation'], adapter, telemetry, core._send)
     link = MqttLink(config["mqtt"], config["robot_id"], core.on_connected, core.on_disconnected, core.on_control)
+    link.navigation_handler = core.on_navigation
     core.bind(link)
 
     stop = threading.Event()

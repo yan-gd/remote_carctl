@@ -1,0 +1,20 @@
+[Unit]
+Description=SCOUT RealSense D435 ROS1 driver
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=agilex
+WorkingDirectory=/home/agilex/Desktop/remote_carctl/robot-bridge
+Environment=ROS_MASTER_URI=http://localhost:11311
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/bin/bash /home/agilex/Desktop/remote_carctl/robot-bridge/run-d435.sh
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

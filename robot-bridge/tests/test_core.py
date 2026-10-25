@@ -275,7 +275,7 @@ class ProtocolTest(BridgeTestCase):
         self.run_for(0.1)  # cycles before the broker answers publish nothing
         self.link.connected = True
         self.bridge.on_connected()
-        self.assertEqual([(TOPIC + "control", 1)], self.link.subscriptions)
+        self.assertEqual([(TOPIC + "control", 1), (TOPIC + "navigation/command", 1)], self.link.subscriptions)
         heartbeat = self.link.messages("heartbeat")[-1]
         self.assertTrue(heartbeat["online"])
         self.assertEqual("test", heartbeat["ros"])
@@ -494,6 +494,16 @@ class MqttLinkTest(unittest.TestCase):
         link._handle_message(None, None, Message(TOPIC + "control", b"{}", 1))
         link._handle_message(None, None, Message(TOPIC + "status", b"{}"))
         self.assertEqual([("control", b"{}", True)], self.events)
+
+    def test_navigation_messages_keep_their_retained_flag_and_robot_scope(self):
+        link = self.make(Paho1)
+        received = []
+        link.navigation_handler = lambda payload, retained: received.append((payload, retained))
+        link._handle_message(None, None, Message(TOPIC + 'navigation/command', b'{"seq":1}', 1))
+        link._handle_message(None, None, Message('robot/OTHER/navigation/command', b'{}'))
+        link._handle_message(None, None, Message(TOPIC + 'navigation/status', b'{}'))
+        self.assertEqual([(b'{"seq":1}', True)], received)
+        self.assertEqual([], self.events)
 
     def test_publish_lifecycle(self):
         link = self.make(Paho1, host="10.1.1.1", port=1884, keepalive=7)

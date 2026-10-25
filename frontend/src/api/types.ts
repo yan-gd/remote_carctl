@@ -1,5 +1,19 @@
 export type Role = 'OPERATOR' | 'MONITOR' | 'MAINTAINER' | 'VIEWER' | string;
 
+export interface NavigationStatus {
+  enabled: boolean;
+  ready: boolean;
+  reason: string | null;
+  active: boolean;
+  missionId: string | null;
+  ownerId: number | null;
+  robot: null | {
+    ready: boolean; reason: string | null; mapId: string | null; frame: string;
+    state: string; missionId: string | null; pointIndex: number; totalPoints: number;
+    x: number | null; y: number | null; yaw: number | null;
+  };
+}
+
 export interface UserView {
   id: number;
   username: string;

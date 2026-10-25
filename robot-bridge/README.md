@@ -1,6 +1,8 @@
 # robot-bridge：SCOUT MINI 的 MQTT ↔ ROS 桥接节点
 
-运行在小车工控机上，与松灵驱动 `scout_base` 并列（ROS1 Noetic 或 ROS2 Foxy/Humble）：
+新增导航与摄像头的完整接入见 [NAVIGATION-CAMERA.md](../docs/NAVIGATION-CAMERA.md)。导航默认关闭，需验证地图/定位/避障并隔离速度话题；摄像头由独立的 `scout-camera-uplink.service` 通过 HTTPS 转发，服务器不保存媒体。
+
+运行在小车工控机上，与松灵驱动 `scout_base` 并列（本次 Xavier 为 ROS1 Melodic + Conda Python3.7，另有 Noetic / ROS2 适配）：
 
 - 订阅 `robot/{id}/control`，把 `FORWARD/BACKWARD/LEFT/RIGHT/STOP` 转成 `geometry_msgs/Twist` 发布到 `/cmd_vel`。
 - 看门狗：0.6 s 内没有新的控制消息就自动停车（需求 PER-006 ≤ 1 s）；与 Broker 断线时立即停车。
@@ -56,6 +58,6 @@ python3 scout_mqtt_bridge.py --ros sim      # 不需要 ROS：仿真底盘，用
 python3 -m unittest discover -s tests -v
 ```
 
-共 40 项测试，已在 Python 3.8 + paho-mqtt 1.6.1 和 Python 3.13 + paho-mqtt 2.1.0 上通过。覆盖命令映射、看门狗与停车帧、STOP 立即生效、断线停车、`seq`/`session` 去重、畸形/保留/他车消息、心跳/状态频率与内容、过期遥测置空、配置校验，以及用替身 rospy/rclpy/scout_msgs 检查 ROS1/ROS2 适配器的话题与字段接线。替身测试只能证明接线正确，**不能代替实车运行** ❓。
+本轮 65 项测试在本机 Python3.13 全部通过，并检查了生产脚本的 Python3.7 语法。覆盖原有命令映射、看门狗、STOP、断线、序号、遥测、ROS替身接线，另有导航租约/地图/健康状态/点位结果、视频解析和HTTP上传边界。历史版本曾在两套 Paho 环境通过，不能据此声称新增代码已在实际 Melodic 上运行。替身测试**不能代替实车运行**。
 
 与后端、Broker 一起的端到端验证见 `../scripts/e2e_sim.py`。

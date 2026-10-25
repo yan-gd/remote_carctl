@@ -1,0 +1,21 @@
+[Unit]
+Description=SCOUT D435 ephemeral HTTPS camera uplink
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=agilex
+WorkingDirectory=/home/agilex/Desktop/remote_carctl/robot-bridge
+EnvironmentFile=/etc/remote-carctl/camera.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/bin/bash /home/agilex/Desktop/remote_carctl/robot-bridge/run-camera-uplink.sh
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

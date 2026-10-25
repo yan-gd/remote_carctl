@@ -11,4 +11,6 @@ public interface RobotListener {
     void onStatus(RobotTelemetry telemetry);
 
     void onAck(RobotAck ack);
+
+    default void onNavigation(NavigationReport report) {}
 }

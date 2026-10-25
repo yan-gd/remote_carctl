@@ -1,0 +1,9 @@
+<launch>
+  <!-- Actual Xavier kit: RS-Helios + vendor cloud-to-scan configuration.
+       Keep the existing scout_base encoder odometry. Do not start rf2o here. -->
+  <include file="$(find rslidar_sdk)/launch/start.launch" />
+  <include file="$(find pointcloud_to_laserscan)/launch/point_to_scan.launch" />
+  <!-- Extrinsic copied from the user's installed open_rslidar.launch. -->
+  <node pkg="tf" type="static_transform_publisher" name="cloud_base_to_rslidar"
+        args="0 0 0.307 0 0 0 base_link rslidar 100" />
+</launch>

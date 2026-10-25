@@ -29,7 +29,9 @@ public class OpenApiConfiguration {
                                         new SecurityScheme()
                                                 .type(SecurityScheme.Type.HTTP)
                                                 .scheme("bearer")
-                                                .bearerFormat("JWT")))
+                                                .bearerFormat("JWT"))
+                                .addSecuritySchemes("cameraDeviceKey", new SecurityScheme()
+                                        .type(SecurityScheme.Type.APIKEY).in(SecurityScheme.In.HEADER).name("X-Device-Key")))
                 .addSecurityItem(new SecurityRequirement().addList("bearerAuth"));
     }
 
@@ -80,6 +82,12 @@ public class OpenApiConfiguration {
                                         control.getPost()
                                                 .getResponses()
                                                 .addApiResponse(status, error(code)));
+            api.getPaths().forEach((name,path)-> {
+                if(name.startsWith("/api/v1/camera/") || name.startsWith("/api/v1/device/camera/")
+                        || name.startsWith("/api/v1/navigation"))
+                    path.readOperations().forEach(op->op.getResponses().addApiResponse("503",
+                            error("CAMERA_DISABLED / CAMERA_OFFLINE / CAMERA_BUSY / NAVIGATION_DISABLED / MQTT_UNAVAILABLE")));
+            });
         };
     }
 

@@ -51,6 +51,8 @@ public class MqttRobotGateway implements RobotGateway, AutoCloseable {
     private final String statusTopic;
     private final String heartbeatTopic;
     private final String ackTopic;
+    private final String navigationTopic;
+    private final String navigationReportTopic;
     private final MqttAsyncClient client;
     private final ScheduledExecutorService retries =
             Executors.newSingleThreadScheduledExecutor(daemon("mqtt-connect"));
@@ -66,6 +68,8 @@ public class MqttRobotGateway implements RobotGateway, AutoCloseable {
         this.statusTopic = settings.topic("status");
         this.heartbeatTopic = settings.topic("heartbeat");
         this.ackTopic = settings.topic("control/ack");
+        this.navigationTopic = settings.topic("navigation/command");
+        this.navigationReportTopic = settings.topic("navigation/status");
         try {
             this.client =
                     new MqttAsyncClient(
@@ -125,6 +129,24 @@ public class MqttRobotGateway implements RobotGateway, AutoCloseable {
     @Override
     public void listen(RobotListener listener) {
         this.listener = listener == null ? NOBODY : listener;
+    }
+
+    @Override
+    public long publishNavigation(NavigationOrder order, Instant issuedAt) {
+        if (!connected()) throw unavailable("MQTT不可用，导航命令未发送");
+        IMqttDeliveryToken token;
+        long seq;
+        synchronized (publishLock) {
+            seq = sequence.incrementAndGet();
+            try {
+                token = client.publish(navigationTopic, NavigationMessages.order(order, issuedAt, seq, session,
+                        settings.robotId()), QOS, false);
+            } catch (MqttException e) { throw unavailable("导航命令未获Broker确认"); }
+        }
+        // Broker waits must not hold the ordering lock and delay a concurrent STOP.
+        try { token.waitForCompletion(settings.publishTimeoutMs()); }
+        catch (MqttException e) { throw unavailable("导航命令未获Broker确认"); }
+        return seq;
     }
 
     @Override
@@ -198,8 +220,8 @@ public class MqttRobotGateway implements RobotGateway, AutoCloseable {
     private void subscribe() {
         try {
             client.subscribe(
-                    new String[] {heartbeatTopic, statusTopic, ackTopic},
-                    new int[] {QOS, QOS, QOS},
+                    new String[] {heartbeatTopic, statusTopic, ackTopic, navigationReportTopic},
+                    new int[] {QOS, QOS, QOS, QOS},
                     null,
                     new IMqttActionListener() {
                         public void onSuccess(IMqttToken token) {
@@ -271,6 +293,10 @@ public class MqttRobotGateway implements RobotGateway, AutoCloseable {
             var ack = messages.ack(payload, session);
             accepted = ack != null;
             if (accepted) l.onAck(ack);
+        } else if (navigationReportTopic.equals(topic)) {
+            var report = NavigationMessages.report(payload, settings.robotId());
+            accepted = report != null;
+            if (accepted) l.onNavigation(report);
         }
         // Throttled: a misconfigured bridge publishing garbage at 2 Hz must not flood the log.
         if (!accepted && rejected.incrementAndGet() % 100 == 1)
@@ -302,6 +328,7 @@ public class MqttRobotGateway implements RobotGateway, AutoCloseable {
         public void messageArrived(String topic, MqttMessage message) {
             if (message.isRetained()) return; // only live robot messages count
             byte[] payload = message.getPayload();
+            if (payload.length > 16384) return;
             dispatch(l -> deliver(l, topic, payload));
         }
 

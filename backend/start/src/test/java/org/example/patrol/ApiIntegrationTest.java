@@ -433,7 +433,7 @@ class ApiIntegrationTest {
     }
 
     @Test
-    void swaggerActuallyDescribesAllTwentyOperations() throws Exception {
+    void swaggerActuallyDescribesAllOperations() throws Exception {
         var doc =
                 json.readTree(
                         mvc.perform(get("/v3/api-docs"))
@@ -449,8 +449,8 @@ class ApiIntegrationTest {
                 operations++;
             }
         }
-        // 17 exp2 operations + GET /robot, GET /robot/status, POST /robot/control
-        assertEquals(20, operations);
+        // 20 existing operations + 3 navigation + 4 transient camera operations.
+        assertEquals(27, operations);
         assertTrue(
                 doc.path("paths")
                         .path("/api/v1/robot/control")

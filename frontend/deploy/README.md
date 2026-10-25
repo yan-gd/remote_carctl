@@ -1,5 +1,7 @@
 # exp3 前端部署（React 19 + Vite 7）
 
+> 2026-10-25 新增摄像头/导航：已有宝塔站点请按 [NAVIGATION-CAMERA.md](../../docs/NAVIGATION-CAMERA.md) 更新媒体转发 location 与 CSP，保留现有证书和站点根目录；无需重建站点。下面的 `/var/www/agilex` 是通用部署示例，本次宝塔现场目录为 `/www/wwwroot/agilex.yoyoyan.cn`。
+
 前端是 React 19 + TypeScript + Vite 7 的单页应用，构建产物在 `dist/`。生产环境由 nginx 同源提供静态文件，并把 `/api/` 反向代理到只监听 `127.0.0.1:8080` 的 Spring Boot 后端。
 
 架构与约定：

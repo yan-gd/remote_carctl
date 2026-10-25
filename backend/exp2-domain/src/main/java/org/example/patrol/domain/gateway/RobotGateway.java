@@ -17,4 +17,8 @@ public interface RobotGateway {
 
     /** Register the consumer of inbound robot messages and link changes. */
     void listen(RobotListener listener);
+
+    default long publishNavigation(NavigationOrder order, Instant issuedAt) {
+        throw BusinessException.unavailable("NAVIGATION_UNAVAILABLE", "当前网关尚未启用导航");
+    }
 }

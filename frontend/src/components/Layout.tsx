@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { errorMessage } from './UI';
 import { useRobot } from '../robot/RobotContext';
 import { formatRelative, roleLabel } from '../utils/format';
 
-export type Tab = 'dashboard' | 'inspection' | 'control' | 'alarms' | 'logs';
+export type Tab = 'dashboard' | 'inspection' | 'control' | 'alarms' | 'logs' | 'camera' | 'navigation';
 
 const NAV: Array<{ id: Tab; label: string; description: string }> = [
   {
@@ -20,6 +21,8 @@ const NAV: Array<{ id: Tab; label: string; description: string }> = [
     label: '控制',
     description: '按住行驶，松开停止；失焦或退出也会自动停车。',
   },
+  { id: 'navigation', label: '导航', description: '已有地图上的真实目标点导航与多点巡逻。' },
+  { id: 'camera', label: '摄像头', description: '实时观看与拍摄，服务端仅转发、不保存。' },
   {
     id: 'alarms',
     label: '告警',
@@ -48,6 +51,7 @@ export function Shell({
   active,
   onNavigate,
   onLogout,
+  onStop,
   children,
 }: {
   username: string;
@@ -55,12 +59,32 @@ export function Shell({
   active: Tab;
   onNavigate: (tab: Tab) => void;
   onLogout: () => Promise<void>;
+  onStop: () => Promise<void>;
   children: ReactNode;
 }) {
   const { status, info, error, updatedAt } = useRobot();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [stopNotice, setStopNotice] = useState<{failed:boolean;message:string}|null>(null);
   const online = status?.online ?? info?.online ?? false;
   const current = NAV.find((item) => item.id === active) ?? NAV[0];
+
+  useEffect(() => {
+    if (!stopNotice) return;
+    const timer = window.setTimeout(() => setStopNotice(null), 6000);
+    return () => window.clearTimeout(timer);
+  }, [stopNotice]);
+
+  async function stop() {
+    if (stopping) return;
+    setStopping(true);
+    setStopNotice(null);
+    try {
+      await onStop();
+      setStopNotice({failed:false,message:'STOP已发送，请核对回执和实际停车状态。'});
+    } catch (caught) { setStopNotice({failed:true,message:errorMessage(caught)}); }
+    finally { setStopping(false); }
+  }
 
   async function logout() {
     if (loggingOut) return;
@@ -132,6 +156,9 @@ export function Shell({
             <p>{current.description}</p>
           </div>
           <div className="topbar-meta">
+            {(role === 'OPERATOR' || role === 'MONITOR') && <button type="button"
+              className="button danger small" disabled={stopping} onClick={() => void stop()}>
+              {stopping ? '正在发送…' : '立即停止'}</button>}
             {error && <span className="text-warn">状态刷新异常</span>}
             <span className="topbar-sync">
               <span className={`live-dot ${online ? 'is-online' : ''}`} aria-hidden="true" />
@@ -140,6 +167,9 @@ export function Shell({
             <span className="topbar-time">{clockText(updatedAt)}</span>
           </div>
         </header>
+        {stopNotice && <div role={stopNotice.failed ? 'alert' : 'status'}
+          className={`global-control-notice notice ${stopNotice.failed ? 'notice-error' : 'notice-info'}`}>
+          {stopNotice.message}</div>}
         <main className="content">{children}</main>
       </div>
     </div>

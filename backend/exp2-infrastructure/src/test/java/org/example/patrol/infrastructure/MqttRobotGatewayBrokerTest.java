@@ -15,6 +15,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 import java.time.Instant;
 import java.util.UUID;
+import java.util.List;
 import java.util.concurrent.*;
 
 /**
@@ -44,6 +45,10 @@ class MqttRobotGatewayBrokerTest {
 
                 public void onAck(RobotAck ack) {
                     events.add(ack);
+                }
+
+                public void onNavigation(NavigationReport report) {
+                    events.add(report);
                 }
             };
 
@@ -76,9 +81,14 @@ class MqttRobotGatewayBrokerTest {
         options.setCleanSession(true);
         options.setWill(topic("heartbeat"), "{\"online\":false,\"reason\":\"LWT\"}".getBytes(UTF_8), 1, false);
         var controls = new LinkedBlockingQueue<String>();
+        var navigation = new LinkedBlockingQueue<String>();
         robot.connect(options);
         robot.subscribe(
                 topic("control"), 1, (t, m) -> controls.add(new String(m.getPayload(), UTF_8)));
+        robot.subscribe(topic("navigation/command"),1,(t,m)-> {
+            assertFalse(m.isRetained());
+            navigation.add(new String(m.getPayload(),UTF_8));
+        });
         try {
             // A retained status left on the broker before the backend subscribes is stale history:
             // the broker re-delivers it with RETAIN=1 and the gateway must ignore it.
@@ -103,6 +113,21 @@ class MqttRobotGatewayBrokerTest {
             assertEquals(gateway.session(), control.path("session").asText());
             assertEquals(id, control.path("robot_id").asText());
             assertTrue(gateway.publish(RobotCommand.STOP, Instant.now()) > seq);
+
+            var order = new NavigationOrder("START","mission-test","map-test",
+                    List.of(new NavigationOrder.Point(1.5,2,0)),2);
+            long navigationSeq = gateway.publishNavigation(order,Instant.now());
+            var navigationMessage = json.readTree(navigation.poll(10,TimeUnit.SECONDS));
+            assertTrue(navigationSeq > seq);
+            assertEquals(navigationSeq,navigationMessage.path("seq").asLong());
+            assertEquals(gateway.session(),navigationMessage.path("session").asText());
+            assertEquals("mission-test",navigationMessage.path("order").path("missionId").asText());
+            assertEquals(1.5,navigationMessage.path("order").path("points").get(0).path("x").asDouble());
+            publish(robot,"navigation/status","{\"robot_id\":\""+id+"\",\"ready\":true,\"state\":\"ACTIVE\",\"map_id\":\"map-test\",\"mission_id\":\"mission-test\",\"point_index\":0,\"total_points\":2}",false);
+            var report = next(NavigationReport.class);
+            assertTrue(report.ready());
+            assertEquals("mission-test",report.missionId());
+            assertEquals("ACTIVE",report.state());
 
             publish(
                     robot,

@@ -107,6 +107,38 @@ export class ApiClient {
     return this.request<RobotStatus>('/api/v1/robot/status');
   }
 
+  cameraStatus(): Promise<{ enabled: boolean; relay: { online: boolean; viewers: number } }> {
+    return this.request('/api/v1/camera/status');
+  }
+
+  navigationStatus(): Promise<import('./types').NavigationStatus> {
+    return this.request('/api/v1/navigation');
+  }
+
+  startNavigation(input: {mapId: string; points: Array<{x:number;y:number;yaw:number}>; cycles:number}): Promise<{accepted:boolean;missionId:string;seq:number}> {
+    return this.request('/api/v1/navigation/missions', { method:'POST', body:input });
+  }
+
+  cancelNavigation(): Promise<unknown> {
+    return this.request('/api/v1/navigation/cancel', {method:'POST'});
+  }
+
+  /** Streaming auth stays in the header, never in an img/video URL or browser storage. */
+  async cameraResponse(kind: 'stream' | 'snapshot', signal: AbortSignal): Promise<Response> {
+    const tokenAtSend = this.token;
+    const response = await this.fetchImpl.call(globalThis, this.buildUrl(`/api/v1/camera/${kind}`), {
+      headers: tokenAtSend ? { Authorization: `Bearer ${tokenAtSend}` } : {},
+      credentials: 'omit', cache: 'no-store', signal,
+    });
+    if (!response.ok) {
+      if (response.status === 401) this.notifyUnauthorized(tokenAtSend);
+      const body = await response.json().catch(() => null) as Envelope | null;
+      throw new ApiError(response.status, typeof body?.code === 'string' ? body.code : 'CAMERA_ERROR',
+        typeof body?.message === 'string' ? body.message : fallbackMessage(response.status));
+    }
+    return response;
+  }
+
   control(command: string): Promise<ControlResult> {
     return this.request<ControlResult>('/api/v1/robot/control', {
       method: 'POST',

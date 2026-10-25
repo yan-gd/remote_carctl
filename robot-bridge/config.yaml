@@ -36,3 +36,20 @@ ros:
 
 sim:                           # only used with --ros sim
   battery_voltage: null        # a fixed voltage to exercise battery alarms; null = not reported
+
+# ROS1 move_base only. Enable after validating map/localization/costmap and remapping
+# move_base's cmd_vel to /navigation/cmd_vel. The bridge must be the ONLY /cmd_vel publisher.
+navigation:
+  enabled: false
+  action: /move_base
+  frame: map
+  base_frame: base_link
+  pose_topic: /patrol/navigation_pose
+  pose_python: /usr/bin/python2.7
+  map_topic: /map
+  scan_topic: /scan
+  costmap_topic: /move_base/local_costmap/costmap
+  velocity_topic: /navigation/cmd_vel
+  max_linear: 0.2
+  max_angular: 0.4
+  goal_timeout: 180

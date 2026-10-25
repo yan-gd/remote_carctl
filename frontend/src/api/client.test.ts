@@ -19,6 +19,27 @@ describe('ApiClient', () => {
     client = new ApiClient(fetchMock as unknown as typeof fetch);
   });
 
+  it('authenticates camera bytes in the header with no cache or token URL', async () => {
+    client.setToken('camera-token');
+    fetchMock.mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3])));
+    await client.cameraResponse('snapshot', new AbortController().signal);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/v1/camera/snapshot');
+    expect(init.headers).toEqual({ Authorization: 'Bearer camera-token' });
+    expect(init.cache).toBe('no-store');
+    expect(init.credentials).toBe('omit');
+  });
+
+  it('expires the current session on camera 401 and surfaces device offline errors', async () => {
+    client.setToken('expired-camera-token');
+    const expired=vi.fn();client.onUnauthorized=expired;
+    fetchMock.mockResolvedValueOnce(response({ code:'TOKEN_EXPIRED',message:'登录过期' },401));
+    await expect(client.cameraResponse('stream',new AbortController().signal)).rejects.toMatchObject({status:401});
+    expect(expired).toHaveBeenCalledOnce();
+    fetchMock.mockResolvedValueOnce(response({code:'CAMERA_OFFLINE',message:'暂无实时画面'},503));
+    await expect(client.cameraResponse('snapshot',new AbortController().signal)).rejects.toMatchObject({code:'CAMERA_OFFLINE'});
+  });
+
   it('logs in without a token and sends the token on later requests', async () => {
     fetchMock.mockResolvedValueOnce(
       response({ code: 'SUCCESS', data: { token: 'jwt-token', user } }),

@@ -1,0 +1,45 @@
+<launch>
+  <!-- Required: a verified map of the CURRENT site, not the bundled factory map.
+       No base driver, lidar odometry, velocity smoother or RViz is started here. -->
+  <arg name="map_yaml" />
+  <arg name="scan_topic" default="/scan" />
+  <node pkg="map_server" type="map_server" name="map_server" args="$(arg map_yaml)" output="screen">
+    <param name="frame_id" value="map" />
+  </node>
+  <node pkg="amcl" type="amcl" name="amcl" output="screen">
+    <rosparam file="$(find scout_description)/param/amcl_params.yaml" command="load" />
+    <!-- Match the running scout_mini_base.launch: odom -> base_link. -->
+    <param name="base_frame_id" value="base_link" />
+    <param name="odom_frame_id" value="odom" />
+    <param name="global_frame_id" value="map" />
+    <remap from="scan" to="$(arg scan_topic)" />
+  </node>
+  <node pkg="move_base" type="move_base" name="move_base" output="screen">
+    <rosparam file="$(find scout_description)/param/4wd/costmap_common_params.yaml" command="load" ns="global_costmap" />
+    <rosparam file="$(find scout_description)/param/4wd/costmap_common_params.yaml" command="load" ns="local_costmap" />
+    <rosparam file="$(find scout_description)/param/4wd/global_costmap_params.yaml" command="load" />
+    <rosparam file="$(find scout_description)/param/4wd/local_costmap_params.yaml" command="load" />
+    <rosparam file="$(find scout_description)/param/4wd/base_local_planner_params.yaml" command="load" />
+    <rosparam file="$(find scout_description)/param/4wd/move_base_params.yaml" command="load" />
+    <!-- Vendor YAML puts plugins at the root. Explicitly scope layers and scans. -->
+    <rosparam param="global_costmap/plugins">
+      - {name: static, type: "costmap_2d::StaticLayer"}
+      - {name: obstacles_laser, type: "costmap_2d::ObstacleLayer"}
+      - {name: inflation, type: "costmap_2d::InflationLayer"}
+    </rosparam>
+    <rosparam param="local_costmap/plugins">
+      - {name: obstacles_laser, type: "costmap_2d::ObstacleLayer"}
+      - {name: inflation, type: "costmap_2d::InflationLayer"}
+    </rosparam>
+    <rosparam file="$(find scout_description)/param/4wd/costmap_common_params.yaml" command="load" ns="global_costmap/obstacles_laser" />
+    <rosparam file="$(find scout_description)/param/4wd/costmap_common_params.yaml" command="load" ns="local_costmap/obstacles_laser" />
+    <param name="global_costmap/obstacles_laser/scan/topic" value="$(arg scan_topic)" />
+    <param name="local_costmap/obstacles_laser/scan/topic" value="$(arg scan_topic)" />
+    <param name="global_costmap/robot_base_frame" value="base_link" />
+    <param name="local_costmap/robot_base_frame" value="base_link" />
+    <param name="global_costmap/inflation/inflation_radius" value="0.55" />
+    <param name="local_costmap/inflation/inflation_radius" value="0.55" />
+    <!-- Only the bridge may publish chassis /cmd_vel. -->
+    <remap from="cmd_vel" to="/navigation/cmd_vel" />
+  </node>
+</launch>
