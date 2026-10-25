@@ -518,3 +518,26 @@ bash frontend/deploy/smoke-test.sh agilex.yoyoyan.cn
 - 服务器无交互SSH检查已尝试一次：`BatchMode=yes` 返回 `Permission denied (publickey,password)`。本地Agent没有完成服务器登录或部署；不要索要用户明文密码，让用户在自己终端执行部署并回传结果。
 - 当前代码仍在工作区，未提交/推送/部署；以git状态为准。保留现场MQTT config.yaml、backend.env、SQLite及jwt-key。所有导航开关默认false。
 - 完成目标仍需要：D435真实帧→HTTPS→Web验收；当前场地地图确认/必要建图、RViz初始定位和真实单点/多点到达；STOP、后端/MQTT断线与定位失效停车测量；真实Nginx媒体无临时文件；相关服务现场安装与重启恢复。未取得这些证据前不要标记整体目标完成。
+
+## 16. 2026-10-25 控制页整合实时画面
+
+### 16.1 现场信息更新
+
+- 用户已反馈摄像头在 Web 可观看，随后反馈帧率低。现有上传配置原为 `CAMERA_FPS=4`，已提供调整至 8 和 JPEG 质量 60 的现场命令；尚未取得调整后实测帧率，不要声称达到 8fps。
+- 本轮之前尝试的 CAN/底盘/相机统一 systemd 方案未通过现场验收。错误的 `ExecStartPost` 检查在 Master 就绪前退出，取消该检查后仍发生在线异常，**不能用 active/running 视为恢复成功**。用户已选择停止采用该方案、恢复终端启动，后续不要重新启用这五个服务来代替排查。
+- `robot-bridge/start-scout.sh` 是本地新增的前台统一启动脚本，沿用 Melodic + 系统 Python2.7 驱动 / Conda Python3 桥接组合，Ctrl+C 清理，支持 `--no-camera`，读取已有配置与密钥。已提供单文件 scp 和执行命令，Bash 语法检查通过；没有整机重启或无人值守恢复验收证据。
+
+### 16.2 本次界面改动
+
+- `frontend/src/pages/ControlPage.tsx`：桌面布局为左侧大画面、右侧状态和方向键；手机为上画面、下控制，状态与方向键并排，收紧留白。原有 hold 控制、松手/失焦 STOP 和角色权限逻辑保留。
+- `frontend/src/components/ControlCamera.tsx`：进入控制页自动连接实时画面，独立显示等待/断流状态，支持连接/断开；视频失败不屏蔽 STOP。
+- `frontend/src/camera/useCameraStream.ts`：复用原摄像头页的鉴权、帧解析、画布绘制和释放流程。控制页与独立摄像头页使用同一 Hook；离开页面中止连接，不增加同时播放的隐藏流。
+- `CameraPage.tsx` 的拍照、浏览器内存录像和下载保留，独立摄像头页仍通过按钮连接。`Layout.tsx` 更新控制页说明，`styles.css` 添加控制台布局。后端、API 客户端、机器人控制算法和上传协议未改动，没有新增依赖。
+
+### 16.3 实际验证与部署边界
+
+- `npm test`：7 个文件、27 项全部通过；新增 5 项测试覆盖同页视频与续发/松手停车、视频错误与失焦停车、MONITOR/VIEWER 权限、离页/断开释放连接以及独立摄像头页入口。
+- `npm run build`：TypeScript 和 Vite 成功，构建产物 `index-BXYriwcH.js` / `index-CAjEgWBG.css`。
+- 生产预览使用本机受控 API/视频夹具，不连接真实机器人。1440×900、1366×768、1024×768 与 390×844 检查布局；最终 1440×900 和 390×844 无内容溢出，手机 STOP 完整可见，无横向溢出。明暗主题已目视检查。
+- 生产预览浏览器验证：连续 FORWARD 后松手发送 STOP，视频仍可观看；无页面异常、无内联 style。截图保存在忽略目录 `verification/control-camera-*.png`，测试画面明确标为 LOCAL LAYOUT TEST，不能作为实车视频证据。
+- 本次部署尚未进行；用户既有 `docs/model.pptx` 和 `docs/v2.0.doc` 未改动。上线只需更新并重新构建前端，不需要重启后端或改动小车服务。

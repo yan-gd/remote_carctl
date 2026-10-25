@@ -4,6 +4,7 @@ import { useHoldControl } from '../control/useHoldControl';
 import { useRobot } from '../robot/RobotContext';
 import { formatNumber, motionLabel } from '../utils/format';
 import { Card, ErrorNotice, StatusPill, errorMessage } from '../components/UI';
+import { ControlCamera } from '../components/ControlCamera';
 
 const DIRECTIONS: Array<{ command: string; label: string; symbol: string }> = [
   { command: 'FORWARD', label: '前进', symbol: '↑' },
@@ -67,59 +68,43 @@ export function ControlPage({ api, role }: { api: ApiClient; role: string }) {
   }
 
   return (
-    <div className="stack">
+    <div className="stack control-page">
       {statusError && <ErrorNotice message={statusError} />}
       {controlError && <ErrorNotice message={controlError} />}
       {notice && <div className="notice notice-info">{notice}</div>}
 
-      <Card
-        className="control-card"
-        title="运动控制"
-        actions={
-          <StatusPill tone={status?.online ? 'ok' : 'warn'}>
-            {status?.online ? '在线' : '离线'}
-          </StatusPill>
-        }
-      >
-        <div className="control-layout">
-          <div className="control-copy">
-            <p className="control-lead">
-              控制请求串行发送。松开、失焦或退出时，STOP 会等待在途指令结束后再发出。
-            </p>
-
-            <dl className="control-readout">
-              <div>
-                <dt>运动状态</dt>
-                <dd>{motionLabel(status?.motionState ?? 'UNKNOWN')}</dd>
-              </div>
-              <div>
-                <dt>线速度</dt>
-                <dd>{formatNumber(status?.linearVelocity, 2, 'm/s')}</dd>
-              </div>
-              <div>
-                <dt>角速度</dt>
-                <dd>{formatNumber(status?.angularVelocity, 2, 'rad/s')}</dd>
-              </div>
-              <div>
-                <dt>电池电压</dt>
-                <dd>{formatNumber(status?.batteryVoltage, 2, 'V')}</dd>
-              </div>
-            </dl>
-
-            <ul className="plain-list control-safety">
-              <li>确认现场无人、车轮架空或场地安全后再试车。</li>
-              <li>网络中断时依赖小车侧 0.6 s 看门狗停车。</li>
-              <li>紧急情况立即点击红色 STOP。</li>
-            </ul>
-
-            {!canMove && (
-              <p className="notice notice-info">
-                {canStop ? '当前角色只能急停，不能驱动。' : '当前角色为只读，不能控制机器人。'}
-              </p>
-            )}
-          </div>
+      <div className="control-console">
+        <ControlCamera api={api} />
+        <Card
+          className="control-card"
+          title="运动控制"
+          actions={
+            <StatusPill tone={status?.online ? 'ok' : 'warn'}>
+              {status?.online ? '在线' : '离线'}
+            </StatusPill>
+          }
+        >
+          <dl className="control-readout">
+            <div>
+              <dt>运动状态</dt>
+              <dd>{motionLabel(status?.motionState ?? 'UNKNOWN')}</dd>
+            </div>
+            <div>
+              <dt>线速度</dt>
+              <dd>{formatNumber(status?.linearVelocity, 2, 'm/s')}</dd>
+            </div>
+            <div>
+              <dt>角速度</dt>
+              <dd>{formatNumber(status?.angularVelocity, 2, 'rad/s')}</dd>
+            </div>
+            <div>
+              <dt>电池电压</dt>
+              <dd>{formatNumber(status?.batteryVoltage, 2, 'V')}</dd>
+            </div>
+          </dl>
 
           <div className="control-stage">
+            <p className="control-hint">按住方向行驶 · 松开停止</p>
             <div className="control-grid">
               {DIRECTIONS.map((item) => {
                 if (item.command === 'STOP') {
@@ -167,8 +152,17 @@ export function ControlPage({ api, role }: { api: ApiClient; role: string }) {
               })}
             </div>
           </div>
-        </div>
-      </Card>
+          <div className="control-footnote">
+            {!canMove && (
+              <p className="notice notice-info">
+                {canStop ? '当前角色只能急停，不能驱动。' : '当前角色为只读，不能控制机器人。'}
+              </p>
+            )}
+            <p>失焦或离开页面会自动发送停止指令。</p>
+            <p>确认现场安全后操作；紧急情况点击停止。</p>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

@@ -1,67 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ApiClient } from '../api/client';
-import { readFrames } from '../camera/frameStream';
+import { useCameraStream } from '../camera/useCameraStream';
 import { Card, ErrorNotice, StatusPill, errorMessage } from '../components/UI';
 
 export function CameraPage({ api }: { api: ApiClient }) {
-  const canvas = useRef<HTMLCanvasElement>(null);
+  const { canvas, running, frames, fresh, error: streamError, toggle } = useCameraStream(api);
   const capture = useRef<MediaRecorder | null>(null);
   const recordingTimer = useRef<number | undefined>(undefined);
   const urls = useRef<string[]>([]);
   const mounted = useRef(true);
   const photoRequest = useRef<AbortController | null>(null);
-  const [running, setRunning] = useState(false);
   const [recording, setRecording] = useState(false);
-  const [frames, setFrames] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [clip, setClip] = useState<string | null>(null);
   const [clipExtension, setClipExtension] = useState('webm');
-  const [lastFrame, setLastFrame] = useState<number | null>(null);
-  const [now, setNow] = useState(Date.now());
-  const fresh = running && lastFrame !== null && now - lastFrame < 3000;
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (!running) return;
-    const controller = new AbortController();
-    let stopped = false;
-    async function watch() {
-      try {
-        while (!controller.signal.aborted) {
-          const response = await api.cameraResponse('stream', controller.signal);
-          if (!response.body) throw new Error('浏览器不支持流式视频。');
-          await readFrames(response.body, async jpeg => {
-            const bitmap = await createImageBitmap(new Blob([jpeg as BlobPart], { type: 'image/jpeg' }));
-            try {
-              if (controller.signal.aborted) return;
-              const target = canvas.current;
-              if (!target) return;
-              // Fixed output dimensions keep MediaRecorder's track stable.
-              const context = target.getContext('2d');
-              if (!context) return;
-              const scale = Math.min(target.width / bitmap.width, target.height / bitmap.height);
-              context.fillStyle = '#07111b';
-              context.fillRect(0, 0, target.width, target.height);
-              context.drawImage(bitmap, (target.width - bitmap.width * scale) / 2,
-                (target.height - bitmap.height * scale) / 2, bitmap.width * scale, bitmap.height * scale);
-              setFrames(value => value + 1);
-              setLastFrame(Date.now());
-            } finally { bitmap.close(); }
-          }, controller.signal);
-          if (!controller.signal.aborted) await new Promise(resolve => window.setTimeout(resolve, 300));
-        }
-      } catch (caught) {
-        if (!stopped) { setError(errorMessage(caught)); setRunning(false); }
-      }
-    }
-    void watch();
-    return () => { stopped = true; controller.abort(); };
-  }, [api, running]);
 
   useEffect(() => {
     mounted.current = true;
@@ -149,7 +102,7 @@ export function CameraPage({ api }: { api: ApiClient }) {
   }
 
   return <div className={`stack camera-page${photo || clip ? ' has-captures' : ''}`}>
-    {error && <ErrorNotice message={error} />}
+    {(error || streamError) && <ErrorNotice message={error || streamError!} />}
     <Card title="实时摄像头" actions={<StatusPill tone={fresh ? 'ok' : 'warn'}>
       {fresh ? '实时画面' : running ? '等待新画面' : '未连接'}</StatusPill>}>
       <div className="camera-stage">
@@ -159,7 +112,7 @@ export function CameraPage({ api }: { api: ApiClient }) {
       <div className="camera-actions">
         <button className="button primary" onClick={() => {
           if (running) stopRecording();
-          setError(null); setRunning(value => !value); setLastFrame(null);
+          setError(null); toggle();
         }}>{running ? '断开画面' : '连接画面'}</button>
         <button className="button" onClick={() => void takePhoto()}>拍照</button>
         <button className="button" disabled={!recording && !fresh} onClick={recording ? stopRecording : record}>
