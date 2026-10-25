@@ -109,4 +109,27 @@ class NavigationServiceTest {
         verify(link).publish(RobotCommand.STOP,clock.instant());
         verify(audit).success(any(),eq("NAVIGATION_END"),contains("PERMISSION_REVOKED"));
     }
+
+    @Test void relativeGoalsAreSingleShotBoundedAndKeepTheirBodyCoordinatesOnTheWire() {
+        when(monitor.navigation()).thenReturn(new NavigationReport("SCOUT-001",true,"READY","relative-session",
+                "odom","IDLE",null,0,0,10.0,20.0,1.57,"relative"));
+        var goal = new NavigationModels.Goal(2.0,1.0,0.0);
+        assertThrows(BusinessException.class,()->service.start(new NavigationModels.Start("relative-session",List.of(goal),2),1));
+        assertThrows(BusinessException.class,()->service.start(new NavigationModels.Start("relative-session",List.of(goal,goal),1),1));
+        for (var point : List.of(new NavigationModels.Goal(3.0,3.0,0.0),new NavigationModels.Goal(0.0,0.0,0.0)))
+            assertThrows(BusinessException.class,()->service.start(new NavigationModels.Start("relative-session",List.of(point),1),1));
+        verify(link,never()).publishNavigation(any(),any());
+        var result = service.start(new NavigationModels.Start("relative-session",List.of(goal),1),1);
+        assertTrue(result.accepted());
+        verify(link).publishNavigation(argThat(o->o.mode().equals("relative") && o.points().get(0).x()==2
+                && o.points().get(0).y()==1 && o.cycles()==1),any());
+        assertEquals("relative",service.status().robot().mode());
+    }
+
+    @Test void previousOdomSessionIsRejectedBeforePublishing() {
+        when(monitor.navigation()).thenReturn(new NavigationReport("SCOUT-001",true,"READY","relative-new",
+                "odom","IDLE",null,0,0,0.0,0.0,0.0,"relative"));
+        assertThrows(BusinessException.class,()->service.start(request("relative-old"),1));
+        verify(link,never()).publishNavigation(any(),any());
+    }
 }

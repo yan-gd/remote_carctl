@@ -21,7 +21,7 @@ public class NavigationController {
     @Operation(summary="查询真实导航能力与状态")
     public ApiResponse<?> status() { return ApiResponse.success(service.status()); }
     @PostMapping("/missions")
-    @Operation(summary="提交地图目标点或多点巡逻",description="仅OPERATOR；accepted仅表示Broker接收，结果以真实move_base回报为准")
+    @Operation(summary="提交相对目标、地图目标点或多点巡逻",description="仅OPERATOR；模式由小车状态决定。relative为前后X/左右Y相对米数、距离0.1-3m、仅单点单次；accepted仅表示Broker接收，结果以真实move_base回报为准")
     public ApiResponse<?> start(@Valid @RequestBody NavigationModels.Start request, @Parameter(hidden=true) @AuthenticationPrincipal Actor actor) {
         return ApiResponse.success(service.start(request,actor.id()));
     }

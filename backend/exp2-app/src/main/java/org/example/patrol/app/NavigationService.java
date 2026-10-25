@@ -48,15 +48,21 @@ public class NavigationService {
         if (!state.ready()) throw BusinessException.conflict("导航未就绪：" + state.reason());
         if (request == null || request.points() == null || request.points().isEmpty() || request.points().size() > 30
                 || request.cycles() < 1 || request.cycles() > 20) throw BusinessException.invalid("点位1-30个，轮次1-20");
-        if (!Objects.equals(request.mapId(), state.robot().mapId())) throw BusinessException.conflict("地图已变化，请刷新目标点");
+        if (!Objects.equals(request.mapId(), state.robot().mapId())) throw BusinessException.conflict("导航参考已变化，请刷新目标点");
+        boolean relative = "relative".equals(state.robot().mode());
+        if (relative && (request.points().size() != 1 || request.cycles() != 1))
+            throw BusinessException.invalid("相对导航仅支持一个目标、执行一次");
         if (mission != null || Set.of("ACTIVE", "PENDING").contains(state.robot().state()))
             throw BusinessException.conflict("已有导航任务，请先取消");
         var points = request.points().stream().map(p -> {
             if (p == null || p.x() == null || p.y() == null || p.yaw() == null) throw BusinessException.invalid("点位不能为空");
-            return new NavigationOrder.Point(p.x(), p.y(), p.yaw());
+            var point = new NavigationOrder.Point(p.x(), p.y(), p.yaw());
+            if (relative && (Math.hypot(p.x(), p.y()) < 0.1 || Math.hypot(p.x(), p.y()) > 3))
+                throw BusinessException.invalid("相对目标距离必须在0.1至3米内");
+            return point;
         }).toList();
         String next = UUID.randomUUID().toString();
-        long seq = gateway.publishNavigation(new NavigationOrder("START", next, request.mapId(), points, request.cycles()), clock.instant());
+        long seq = gateway.publishNavigation(new NavigationOrder("START", next, request.mapId(), points, request.cycles(), state.robot().mode()), clock.instant());
         mission=next; owner=actor; leaseAt=clock.millis();
         record(() -> audit.success(user, "NAVIGATION_START", "mission:" + next));
         return new Accepted(true, next, seq);

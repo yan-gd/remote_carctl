@@ -123,4 +123,30 @@ class CameraNavigationApiTest {
         assertEquals(RobotCommand.STOP,link.sent.get(link.sent.size()-2));
         assertEquals("CANCEL",((NavigationOrder)link.sent.get(link.sent.size()-1)).action());
     }
+
+    @Test void relativeNavigationEnforcesRadiusAndSingleGoalThroughTheApi() throws Exception {
+        monitor.onLink(true);monitor.onHeartbeat(new RobotHeartbeat(true,true,null));
+        monitor.onNavigation(new NavigationReport("SCOUT-001",true,"READY","relative-session","odom",
+                "IDLE",null,0,0,10.0,20.0,0.0,"relative"));
+        try {
+            mvc.perform(get("/api/v1/navigation").header("Authorization",token(Role.VIEWER)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.robot.mode").value("relative"));
+            for (var invalid:List.of(
+                    Map.of("mapId","relative-session","cycles",1,"points",List.of(Map.of("x",3,"y",3,"yaw",0))),
+                    Map.of("mapId","relative-session","cycles",2,"points",List.of(Map.of("x",1,"y",0,"yaw",0)))))
+                mvc.perform(post("/api/v1/navigation/missions").header("Authorization",token(Role.OPERATOR))
+                    .contentType("application/json").content(json.writeValueAsBytes(invalid)))
+                    .andExpect(status().isBadRequest());
+            var request=Map.of("mapId","relative-session","cycles",1,"points",List.of(Map.of("x",2,"y",1,"yaw",0)));
+            mvc.perform(post("/api/v1/navigation/missions").header("Authorization",token(Role.OPERATOR))
+                .contentType("application/json").content(json.writeValueAsBytes(request)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.accepted").value(true));
+            var order=(NavigationOrder)link.sent.get(link.sent.size()-1);
+            assertEquals("relative",order.mode());assertEquals(2,order.points().get(0).x());
+            mvc.perform(post("/api/v1/navigation/cancel").header("Authorization",token(Role.MONITOR)))
+                .andExpect(status().isOk());
+        } finally {
+            monitor.onLink(false);
+        }
+    }
 }

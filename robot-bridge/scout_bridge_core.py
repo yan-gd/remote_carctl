@@ -51,7 +51,7 @@ DEFAULT_CONFIG = {
         "status_topic": "/scout_status",
     },
     "sim": {"battery_voltage": None},
-    "navigation": {"enabled": False, "action": "/move_base", "frame": "map", "base_frame": "base_link",
+    "navigation": {"enabled": False, "mode": "map", "action": "/move_base", "frame": "map", "base_frame": "base_link",
                    "pose_topic": "/patrol/navigation_pose", "pose_python": "/usr/bin/python2.7",
                    "map_topic": "/map", "scan_topic": "/scan", "costmap_topic": "/move_base/local_costmap/costmap",
                    "velocity_topic": "/navigation/cmd_vel", "max_linear": 0.2, "max_angular": 0.4, "goal_timeout": 180},
@@ -101,6 +101,8 @@ def _validate(config):
     nav = config['navigation']
     if not isinstance(nav['enabled'], bool):
         raise ConfigError('navigation.enabled must be boolean')
+    if nav['mode'] not in ('map', 'relative'):
+        raise ConfigError('navigation.mode must be map or relative')
     for key in ('action', 'frame', 'base_frame', 'map_topic', 'scan_topic', 'costmap_topic', 'velocity_topic', 'pose_topic', 'pose_python'):
         if not isinstance(nav[key], str) or not nav[key]:
             raise ConfigError('navigation.%s must be nonempty' % key)
@@ -109,6 +111,12 @@ def _validate(config):
     _number(config, 'navigation', 'max_linear', 0.01, 0.3)
     _number(config, 'navigation', 'max_angular', 0.01, 0.6)
     _number(config, 'navigation', 'goal_timeout', 10, 600)
+    if nav['mode'] == 'relative':
+        nav['frame'] = 'odom'
+        nav['map_topic'] = '/move_base/global_costmap/costmap'
+        nav['max_linear'] = min(nav['max_linear'], 0.15)
+        nav['max_angular'] = min(nav['max_angular'], 0.3)
+        nav['goal_timeout'] = min(nav['goal_timeout'], 60)
     if not isinstance(mqtt["host"], str) or not mqtt["host"].strip():
         raise ConfigError("mqtt.host must be the broker address")
     _number(config, "mqtt", "port", 1, 65535, integer=True)

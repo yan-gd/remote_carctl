@@ -541,3 +541,36 @@ bash frontend/deploy/smoke-test.sh agilex.yoyoyan.cn
 - 生产预览使用本机受控 API/视频夹具，不连接真实机器人。1440×900、1366×768、1024×768 与 390×844 检查布局；最终 1440×900 和 390×844 无内容溢出，手机 STOP 完整可见，无横向溢出。明暗主题已目视检查。
 - 生产预览浏览器验证：连续 FORWARD 后松手发送 STOP，视频仍可观看；无页面异常、无内联 style。截图保存在忽略目录 `verification/control-camera-*.png`，测试画面明确标为 LOCAL LAYOUT TEST，不能作为实车视频证据。
 - 本次部署尚未进行；用户既有 `docs/model.pptx` 和 `docs/v2.0.doc` 未改动。上线只需更新并重新构建前端，不需要重启后端或改动小车服务。
+
+## 17. 2026-10-25 相对目标与实时激光避障
+
+### 17.1 用户选择与现场证据
+
+- 用户明确选择“附近几米内的相对位置”，同意先实现 3 米内单目标。**这是新增的 relative 模式**，不替换原固定地图/多点模式，不继续要求先建图。
+- 用户实车 `/scan` 实测稳定约 10Hz；只找到套装 `scout_description/maps/map.yaml`，没有当前场地地图已验证的证据。原 gmapping 的 base_frame 为 base_footprint，与底盘 base_link 不同；relative 不启动该建图入口。
+- 此前控制页摄像头与前台启动脚本已推送：`79a6dde` / `f97a75a`。本节记录新增功能的本地实现与测试，远程同步状态以Git为准；尚未部署或发送任何真实目标。
+
+### 17.2 实现
+
+- `scout_navigation.py` 新增 RelativeRos1NavigationAdapter，原地图适配器保留。接受时将单个车身相对目标固定到 odom；目标距离 0.1–3m，单次执行。障碍网格内容/滚动原点变化不改变导航参考，桥接启动和明显里程计跳变会使旧参考失效；地图更新不再误触发“静态地图指纹变化”停车。
+- 使用新鲜真实 odom TF、底盘、LaserScan 与全量发布的滚动代价地图；不伪造位姿/地图，不注入静态 odom TF。要求开始时停车；未知/占用区域及目标周围0.35m空间检查保留。ROS主站检查继续在后台，目标转换不在MQTT线程同步调用阻塞ROS RPC。
+- 相对模式上限：0.15m/s、0.3rad/s、60秒、距离起点4m、累计绕行6m。保留3秒云端租约、STOP/手动覆盖、过期数据拒绝、action结果推进，达到任意边界取消停车。
+- `cloud_relative_navigation.launch` / `relative_navigation.yaml`：只启动 move_base，odom滚动代价地图，Navfn + TrajectoryPlannerROS，实时激光标记/清除，禁止未知空间规划，关闭恢复旋转和兜底倒车，输出仍隔离在 `/navigation/cmd_vel`。不启动map_server、AMCL、第二份底盘或激光里程计。
+- `start-scout.sh --relative`：在现有前台启动方式中启动底盘/雷达/导航/桥接/可选摄像头，Ctrl+C统一清理。先检查原生TF、Python3 action消息和ROS包，缺包直接报错；CLI覆盖导航模式，不改现场MQTT config.yaml。旧服务存在时逐个停用，不存在时不影响启动。
+- 后端NavigationReport/NavigationOrder/MQTT增加mode，旧报告默认map；relative报告必须为odom。NavigationService与小车双重校验单点/单次/半径，绑定当前导航参考，DTO/Swagger补充坐标含义。API路径和SQLite不变，无新增Maven/npm/pip依赖。
+- Web根据小车实际模式显示“前后/左右距离”、相对终点朝向、odom位置和会话标识，隐藏多点/轮次；切换模式清空旧坐标。摄像头和人工控制逻辑不改动。
+
+### 17.3 本地验证与下一步
+
+| 检查 | 真实结果 |
+| --- | --- |
+| `mvn clean install` | BUILD SUCCESS，51.268s，122项、0失败、0错误、0跳过；含本机真实amqtt0.12.1的relative命令/报告往返和MockMvc参数/权限校验 |
+| JaCoCo聚合 | 行94.64%（1535/1622），分支84.61%（643/760）；`backend/start/target/site/jacoco-aggregate/index.html` |
+| Python桥接 | 80项全部通过；坐标旋转与冻结、半径/多点拒绝、未知/占用网格、动态网格参考不变、odom跳变、数据/租约过期、行程边界与STOP；本机Python执行，非实车ROS验证 |
+| 前端 | 29项通过，TypeScript/Vite构建成功；`index-X92P1Gsp.js` / `index-IgcJINsL.css` |
+| 静态兼容 | 生产桥接文件通过Python3.7语法解析，启动脚本通过bash -n；launch XML/YAML经测试解析 |
+| 浏览器生产预览 | 受控本地API夹具验证正确提交X/Y偏移与cycles=1，开始/取消，1440×900和390×844显示；手机无横向/内容溢出，无页面异常；不是实车执行证据 |
+
+部署入口：[docs/RELATIVE-NAVIGATION.md](docs/RELATIVE-NAVIGATION.md)。这次需要更新**服务器后端+前端和小车代码**，服务器沿用PATROL_NAVIGATION_ENABLED=true；小车使用仓库新脚本，不用`~/start-scout.sh`旧副本。启动前结束旧底盘/雷达/导航窗口，避免重复节点。不要重新安装之前失败的统一systemd方案。
+
+尚需现场确认：现有ROS规划器插件能加载、滚动障碍地图/odom新鲜、实际0.5m目标到达、障碍变化时绕行或终止、STOP/断链与感知失效停车、里程计漂移和真实精度。未取得这些结果前不要声称“实车自主避障已完成”。用户既有`docs/model.pptx`和`docs/v2.0.doc`未修改。

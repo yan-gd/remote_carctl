@@ -29,7 +29,7 @@ def main():
             report['navigation_python_imports'][label] = output.decode().strip()[-1000:]
         except (OSError, subprocess.CalledProcessError) as error:
             report['navigation_python_imports'][label] = getattr(error, 'output', b'NOT_AVAILABLE').decode('utf-8', 'replace')[-1000:]
-    for package in ('scout_bringup', 'scout_base', 'move_base', 'amcl', 'map_server',
+    for package in ('scout_bringup', 'scout_base', 'move_base', 'navfn', 'base_local_planner', 'amcl', 'map_server',
                     'realsense2_camera', 'usb_cam', 'rslidar_pointcloud', 'pointcloud_to_laserscan'):
         try:
             path = subprocess.check_output(['rospack', 'find', package], stderr=subprocess.STDOUT).decode().strip()

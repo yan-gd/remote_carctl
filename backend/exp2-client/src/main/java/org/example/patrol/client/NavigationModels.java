@@ -7,10 +7,10 @@ import java.util.List;
 
 public final class NavigationModels {
     private NavigationModels() {}
-    public record Goal(@Schema(description = "map坐标系X，米") @NotNull Double x,
-                       @Schema(description = "map坐标系Y，米") @NotNull Double y,
-                       @Schema(description = "目标朝向，弧度[-π,π]") @NotNull Double yaw) {}
-    public record Start(@Schema(description = "实时导航状态中返回的地图指纹，防止用错地图") @NotBlank @Size(max=128) String mapId,
-                        @Schema(description = "按顺序执行的目标点，最多30个") @NotEmpty @Size(max=30) List<@NotNull @Valid Goal> points,
+    public record Goal(@Schema(description = "米；map模式为地图X，relative模式为前进距离（负数后方）") @NotNull Double x,
+                       @Schema(description = "米；map模式为地图Y，relative模式为左移距离（负数右侧）；相对距离0.1至3m") @NotNull Double y,
+                       @Schema(description = "弧度[-π,π]；map为绝对朝向，relative为相对开始时朝向") @NotNull Double yaw) {}
+    public record Start(@Schema(description = "导航状态的mapId；map模式为地图指纹，relative模式为里程计会话标识") @NotBlank @Size(max=128) String mapId,
+                        @Schema(description = "map最多30点；relative仅允许1点、cycles=1，模式由小车报告决定") @NotEmpty @Size(max=30) List<@NotNull @Valid Goal> points,
                         @Schema(description = "巡逻轮次1-20，不提供无限循环") @Min(1) @Max(20) int cycles) {}
 }

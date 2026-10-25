@@ -2,9 +2,12 @@ package org.example.patrol.domain;
 
 import java.util.List;
 
-/** Cloud supplies map-frame goals; onboard move_base plans and avoids obstacles. */
+/** Coordinates follow mode: saved map, or a single frozen body-relative offset. */
 public record NavigationOrder(String action, String missionId, String mapId,
-                              List<Point> points, int cycles) {
+                              List<Point> points, int cycles, String mode) {
+    public NavigationOrder(String action, String missionId, String mapId, List<Point> points, int cycles) {
+        this(action, missionId, mapId, points, cycles, "map");
+    }
     public record Point(double x, double y, double yaw) {
         public Point {
             if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(yaw)

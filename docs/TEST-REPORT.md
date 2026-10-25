@@ -122,3 +122,16 @@ python scripts\e2e_sim.py --bridge-python <装有 paho-mqtt 与 PyYAML 的 pytho
 | TLS、Broker 账号 | 配置与代码路径已具备，只有单元测试，没有做端到端测试 |
 | 时序参数 | 看门狗 0.6 s、保活 200 ms、心跳超时 3 s 需要在实车 Wi-Fi 下确认（TBD-008/009） |
 | 电池阈值 | SCOUT MINI 的正常/低电电压未知，告警阈值默认关闭，需要实车测量后再设置 |
+
+## 7. 2026-10-25 相对导航增量验证
+
+以下为新增relative模式的本地结果，旧章节保留为历史记录：
+
+- `mvn clean install`：BUILD SUCCESS，51.268s；122项、0失败、0错误、0跳过。独立本机amqtt监听127.0.0.1:18883，验证map与relative两种命令/状态往返；MockMvc验证相对模式的角色、半径、单目标单次和取消接口。
+- JaCoCo聚合：行1535/1622（94.64%），分支643/760（84.61%）。报告在`backend/start/target/site/jacoco-aggregate/`。
+- Python：80项通过。新增相对坐标旋转、固定目标、0.1–3m半径边界、网格未知/占用、动态障碍更新与导航参考分离、里程计跳变、停止前提、行程边界、超时、租约和手动STOP测试；保持原地图模式回归。
+- 前端：29项通过，生产构建成功。relative模式隐藏多点与轮次，验证正确偏移请求、对角线超半径拒绝和模式改变时清空旧坐标。原控制页视频与停车测试继续通过。
+- 本机生产预览用受控API夹具检查1440×900、390×844布局和开始/取消请求；无页面异常。截图位于忽略目录`verification/relative-navigation-*.png`，不作为实车证据。
+- Bash语法、Python3.7语法解析和ROS launch/XML/YAML静态检查通过。没有在Windows模拟一个假move_base来声称实车到达。
+
+这些测试不证明Xavier上的ROS插件、传感器校准、现场障碍识别或实际到达精度。实车部署与验收步骤见[相对导航说明](RELATIVE-NAVIGATION.md)。

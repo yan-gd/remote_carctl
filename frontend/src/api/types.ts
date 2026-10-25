@@ -8,6 +8,7 @@ export interface NavigationStatus {
   missionId: string | null;
   ownerId: number | null;
   robot: null | {
+    mode?: 'map' | 'relative';
     ready: boolean; reason: string | null; mapId: string | null; frame: string;
     state: string; missionId: string | null; pointIndex: number; totalPoints: number;
     x: number | null; y: number | null; yaw: number | null;

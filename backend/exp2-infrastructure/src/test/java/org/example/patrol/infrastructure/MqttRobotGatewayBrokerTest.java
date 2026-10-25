@@ -129,6 +129,17 @@ class MqttRobotGatewayBrokerTest {
             assertEquals("mission-test",report.missionId());
             assertEquals("ACTIVE",report.state());
 
+            var relativeOrder=new NavigationOrder("START","nearby-test","relative-session",
+                    List.of(new NavigationOrder.Point(2,1,0)),1,"relative");
+            gateway.publishNavigation(relativeOrder,Instant.now());
+            var relativeWire=json.readTree(navigation.poll(10,TimeUnit.SECONDS));
+            assertEquals("relative",relativeWire.path("order").path("mode").asText());
+            assertEquals(2,relativeWire.path("order").path("points").get(0).path("x").asDouble());
+            publish(robot,"navigation/status","{\"robot_id\":\""+id+"\",\"mode\":\"relative\",\"frame\":\"odom\",\"ready\":true,\"state\":\"ACTIVE\",\"map_id\":\"relative-session\",\"mission_id\":\"nearby-test\"}",false);
+            var nearbyReport=next(NavigationReport.class);
+            assertEquals("relative",nearbyReport.mode());assertEquals("odom",nearbyReport.frame());
+            assertEquals("nearby-test",nearbyReport.missionId());
+
             publish(
                     robot,
                     "status",

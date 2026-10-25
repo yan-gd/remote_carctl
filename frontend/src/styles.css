@@ -2124,6 +2124,16 @@ td:first-child {
 .navigation-readout dd { font-size: 0.9rem; overflow-wrap: anywhere; }
 .navigation-cycles { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
 .navigation-cycles input { width: 4.5rem; }
+.relative-goal-row { grid-template-columns: 1.7rem repeat(3, minmax(0, 1fr)); }
+@media (max-width: 560px) {
+  .relative-goal-row { grid-template-columns: 1.4rem repeat(2, minmax(0, 1fr)); }
+  .is-relative .navigation-readout { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; }
+  .is-relative .navigation-readout > div { padding: 0.45rem 0.6rem; }
+  .is-relative .card-head { flex-direction: row; align-items: center; gap: 0.5rem; }
+  .is-relative .card-head h2 { font-size: 1rem; }
+  .is-relative .card-actions { width: auto; flex: none; }
+  .is-relative .fine-print { font-size: 0.68rem; line-height: 1.65; }
+}
 .global-control-notice { position: fixed; bottom: 1rem; right: 1rem; max-width: min(28rem, calc(100vw - 2rem)); z-index: 100; pointer-events: none; box-shadow: var(--shadow-card); }
 
 @media (min-width: 1100px) {

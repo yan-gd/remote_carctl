@@ -39,4 +39,33 @@ describe('autonomous navigation page',()=>{
     expect(screen.getByRole('button',{name:'取消导航并停止'})).toBeDisabled();
     expect(api.startNavigation).not.toHaveBeenCalled();
   });
+  it('submits one body-relative goal and hides map patrol controls',async()=>{
+    const api=client();
+    api.navigationStatus.mockResolvedValue({...ready,robot:{...ready.robot!,mode:'relative',frame:'odom',mapId:'relative-session'}});
+    const view=render(<NavigationPage api={api as unknown as ApiClient} role="OPERATOR"/>);
+    await act(async()=>{});
+    expect(screen.getByText('附近目标 · 实时避障')).toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'添加目标点'})).not.toBeInTheDocument();
+    expect(screen.queryByText('轮次')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('前后距离'),{target:{value:'2'}});
+    fireEvent.change(screen.getByLabelText('左右距离'),{target:{value:'1'}});
+    await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'开始导航'}));});
+    expect(api.startNavigation).toHaveBeenCalledWith({mapId:'relative-session',cycles:1,points:[{x:2,y:1,yaw:0}]});
+    view.unmount();
+    expect(api.cancelNavigation).not.toHaveBeenCalled();
+  });
+  it('rejects diagonal goals beyond 3m and resets coordinates when mode changes',async()=>{
+    const api=client();
+    render(<NavigationPage api={api as unknown as ApiClient} role="OPERATOR"/>);
+    await act(async()=>{});
+    fireEvent.change(screen.getByLabelText('目标点1 x'),{target:{value:'100'}});
+    api.navigationStatus.mockResolvedValue({...ready,robot:{...ready.robot!,mode:'relative',frame:'odom',mapId:'relative-session'}});
+    await act(async()=>{await vi.advanceTimersByTimeAsync(1000);});
+    expect(screen.getByLabelText('前后距离')).toHaveValue(null);
+    fireEvent.change(screen.getByLabelText('前后距离'),{target:{value:'3'}});
+    fireEvent.change(screen.getByLabelText('左右距离'),{target:{value:'3'}});
+    await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'开始导航'}));});
+    expect(screen.getByRole('alert')).toHaveTextContent('0.1至3米');
+    expect(api.startNavigation).not.toHaveBeenCalled();
+  });
 });

@@ -248,6 +248,7 @@ def parse_args(argv):
     parser.add_argument("--robot-id", help="overrides robot_id")
     parser.add_argument("--host", help="overrides mqtt.host")
     parser.add_argument("--port", type=int, help="overrides mqtt.port")
+    parser.add_argument("--navigation-mode", choices=("map", "relative"), help="explicitly enable the selected navigation mode")
     parser.add_argument("--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR"))
     return parser.parse_args(argv)
 
@@ -259,6 +260,9 @@ def build_config(args):
     overrides = read_config_file(path) if os.path.isfile(path) else {}
     if args.robot_id:
         overrides["robot_id"] = args.robot_id
+    if getattr(args, 'navigation_mode', None):
+        overrides.setdefault('navigation', {})
+        overrides['navigation'].update(enabled=True, mode=args.navigation_mode)
     for key, value in (("host", args.host), ("port", args.port)):
         if value is not None:
             overrides.setdefault("mqtt", {})
