@@ -574,3 +574,12 @@ bash frontend/deploy/smoke-test.sh agilex.yoyoyan.cn
 部署入口：[docs/RELATIVE-NAVIGATION.md](docs/RELATIVE-NAVIGATION.md)。这次需要更新**服务器后端+前端和小车代码**，服务器沿用PATROL_NAVIGATION_ENABLED=true；小车使用仓库新脚本，不用`~/start-scout.sh`旧副本。启动前结束旧底盘/雷达/导航窗口，避免重复节点。不要重新安装之前失败的统一systemd方案。
 
 尚需现场确认：现有ROS规划器插件能加载、滚动障碍地图/odom新鲜、实际0.5m目标到达、障碍变化时绕行或终止、STOP/断链与感知失效停车、里程计漂移和真实精度。未取得这些结果前不要声称“实车自主避障已完成”。用户既有`docs/model.pptx`和`docs/v2.0.doc`未修改。
+
+## 18. 2026-10-25 H.264/WebRTC 可选链路（本地代码，未部署）
+
+- 用户反馈原 JPEG 帧率低、摄像头偶发掉线，要求直接修改为 H.264/WebRTC。新增 `docs/H264-WEBRTC.md`，方案是 Xavier ROS D435 图像经 GStreamer/NVENC 编码、RTSPS 推送至 MediaMTX，React 通过原 JWT 保护的 WHEP 信令接收。MediaMTX 仅转发，不开录制。
+- 前端 `VITE_CAMERA_TRANSPORT=webrtc` 为明确的发布开关；默认仍是原 JPEG，不会影响已部署站点。WebRTC 会自动重连并在连续失败后回退 JPEG；旧 JPEG 传输也加入自动重连及 7 秒无新帧超时检测。WHEP JWT 不进入 URL 或日志；远端会话地址限定为同源指定路径；摄像头页拍照/录像继续本地进行。
+- 机器人新增 `scout_h264_uplink.py`（系统 Python2.7 的 rospy + PyGObject/GStreamer，不使用 Conda 的 GI），`start-scout.sh --webrtc` 预检硬件编码插件和独立密钥文件，默认 640×480、15fps、900kbit/s。原 D435/JPEG 退出后的保护性清理保留；仅新增的 H.264 发布器是非关键进程并自行重试。
+- 服务器新增 `server/media/mediamtx.yml`、可选 systemd 单元和 `frontend/deploy/webrtc-relay.conf`。通过 RTSPS/TCP 8322 上传、WebRTC/UDP 8189 播放；WHEP HTTP 仅监听本地 8889 并由 Nginx `auth_request` 验证 Spring JWT。示例密钥占位符必须现场替换；不能直接公网开放 8889，也不能改写现有 SQLite、证书或 BT vhost。
+- 本地 `npm run typecheck`、`npm test`（33项，含 WHEP 会话更新和 JPEG 停帧重连）、JPEG 与 WebRTC 两种 `npm run build` 通过；Python 桥接82项通过（含本次 H.264 配置/队列新增2项），`bash -n` 通过。MediaMTX v1.21.2 可以解析新增配置，本地因不存在服务器 TLS 证书而未实际启动。**这些不代表 Xavier 上的 PyGObject/NVENC/RTSPS 或公网 WHEP/ICE 已验收。** 现场需要按部署文档依序验证证书、编码器、媒体端口、鉴权、FPS、断线恢复与既有 STOP。
+- 本次代码在工作区，未推送或部署。后续先检查 `git status`；不得提交运行密码或将实验目标FPS写成实测结果。

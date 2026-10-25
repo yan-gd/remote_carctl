@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Foreground launcher for this Xavier: ROS1 Melodic + Conda Python 3.7.
-# Run as agilex: bash start-scout.sh [--no-camera] [--relative]
+# Run as agilex: bash start-scout.sh [--no-camera] [--relative] [--webrtc]
 set -eo pipefail
 
 SCOUT_DIR=/home/agilex/Desktop/remote_carctl/robot-bridge
@@ -8,14 +8,17 @@ SCOUT_PY2=/usr/bin/python2.7
 SCOUT_PY3=/home/agilex/archiconda3/bin/python3
 SCOUT_CAMERA=1
 SCOUT_RELATIVE=0
+SCOUT_WEBRTC=0
 SCOUT_CLIENTS=()
 SCOUT_DRIVERS=()
+SCOUT_MEDIA=()
 
 for SCOUT_ARG in "$@"; do
     case "$SCOUT_ARG" in
         --no-camera) SCOUT_CAMERA=0 ;;
         --relative) SCOUT_RELATIVE=1 ;;
-        *) echo 'Usage: bash start-scout.sh [--no-camera] [--relative]' >&2; exit 2 ;;
+        --webrtc) SCOUT_WEBRTC=1 ;;
+        *) echo 'Usage: bash start-scout.sh [--no-camera] [--relative] [--webrtc]' >&2; exit 2 ;;
     esac
 done
 
@@ -45,6 +48,20 @@ fi
 
 sudo -v
 SCOUT_ENV="$HOME/.config/remote-carctl/camera.env"
+SCOUT_H264_ENV="$HOME/.config/remote-carctl/h264.env"
+if (( SCOUT_WEBRTC && ! SCOUT_CAMERA )); then
+    echo '--webrtc requires the camera; remove --no-camera.' >&2
+    exit 2
+fi
+if (( SCOUT_WEBRTC )); then
+    "$SCOUT_PY2" -c 'import gi; gi.require_version("Gst", "1.0"); from gi.repository import Gst'
+    for SCOUT_PLUGIN in appsrc jpegdec nvvidconv nvv4l2h264enc h264parse rtspclientsink; do
+        gst-inspect-1.0 "$SCOUT_PLUGIN" >/dev/null
+    done
+    if [[ ! -r "$SCOUT_H264_ENV" ]]; then
+        sudo -n test -s /etc/remote-carctl/h264.env
+    fi
+fi
 if (( SCOUT_CAMERA )); then
     test -r "$SCOUT_DIR/scout_camera_uplink.py"
     if [[ ! -r "$SCOUT_ENV" ]]; then
@@ -62,20 +79,20 @@ done
 
 scout_cleanup() {
     trap - EXIT INT TERM
-    echo 'Stopping camera uplink and MQTT bridge...'
-    for SCOUT_PID in "${SCOUT_CLIENTS[@]}"; do
+    echo 'Stopping camera publishers and MQTT bridge...'
+    for SCOUT_PID in "${SCOUT_MEDIA[@]}" "${SCOUT_CLIENTS[@]}"; do
         kill -TERM "$SCOUT_PID" 2>/dev/null || true
     done
     # A client stuck inside rospy.init_node may not respond to its own handler.
     for (( SCOUT_N=0; SCOUT_N<30; SCOUT_N++ )); do
         SCOUT_ALIVE=0
-        for SCOUT_PID in "${SCOUT_CLIENTS[@]}"; do
+        for SCOUT_PID in "${SCOUT_MEDIA[@]}" "${SCOUT_CLIENTS[@]}"; do
             if kill -0 "$SCOUT_PID" 2>/dev/null; then SCOUT_ALIVE=1; fi
         done
         if (( SCOUT_ALIVE == 0 )); then break; fi
         sleep 0.2
     done
-    for SCOUT_PID in "${SCOUT_CLIENTS[@]}"; do
+    for SCOUT_PID in "${SCOUT_MEDIA[@]}" "${SCOUT_CLIENTS[@]}"; do
         kill -KILL "$SCOUT_PID" 2>/dev/null || true
         wait "$SCOUT_PID" 2>/dev/null || true
     done
@@ -149,6 +166,24 @@ if (( SCOUT_CAMERA )); then
             --fps "${CAMERA_FPS:-4}"
     ) &
     SCOUT_CLIENTS+=("$!")
+    if (( SCOUT_WEBRTC )); then
+        (
+            set -a
+            if [[ -r "$SCOUT_H264_ENV" ]]; then
+                source "$SCOUT_H264_ENV"
+            else
+                source <(sudo -n cat /etc/remote-carctl/h264.env)
+            fi
+            set +a
+            : "${SCOUT_RTSP_URL:?Missing SCOUT_RTSP_URL}"
+            : "${SCOUT_RTSP_USER:?Missing SCOUT_RTSP_USER}"
+            : "${SCOUT_RTSP_PASSWORD:?Missing SCOUT_RTSP_PASSWORD}"
+            exec "$SCOUT_PY2" -u scout_h264_uplink.py \
+                --ros-topic "${SCOUT_H264_ROS_TOPIC:-/camera/color/image_raw/compressed}" \
+                --fps "${SCOUT_H264_FPS:-15}" --bitrate "${SCOUT_H264_BITRATE:-900000}"
+        ) &
+        SCOUT_MEDIA+=("$!")
+    fi
 fi
 
 echo 'Processes launched. Keep this terminal open; Ctrl+C stops them.'
@@ -158,6 +193,16 @@ while sleep 2; do
         if ! kill -0 "$SCOUT_PID" 2>/dev/null; then
             echo "Process $SCOUT_PID exited. Stopping the other processes." >&2
             exit 1
+        fi
+    done
+    # Only the added H.264 publisher is optional. The established D435/JPEG
+    # failure cleanup remains a safety interlock for remote driving.
+    for SCOUT_INDEX in "${!SCOUT_MEDIA[@]}"; do
+        SCOUT_PID=${SCOUT_MEDIA[SCOUT_INDEX]}
+        if ! kill -0 "$SCOUT_PID" 2>/dev/null; then
+            wait "$SCOUT_PID" 2>/dev/null || true
+            echo "H.264 publisher $SCOUT_PID exited; check video logs." >&2
+            unset 'SCOUT_MEDIA[SCOUT_INDEX]'
         fi
     done
 done

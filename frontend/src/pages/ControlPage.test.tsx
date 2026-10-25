@@ -71,17 +71,35 @@ describe('camera and manual controls together', () => {
     expect(link.signal().aborted).toBe(true);
   });
 
-  it('shows a stream failure without blocking STOP and still stops held motion on blur', async () => {
+  it('retries a stream failure without blocking STOP and still stops held motion on blur', async () => {
     const link = client();
     render(<ControlPage api={link.api} role="OPERATOR" />);
     await act(async () => {});
     await act(async () => { link.fail(); });
-    expect(screen.getByRole('alert')).toHaveTextContent('视频连接中断');
-    expect(screen.getByRole('button', { name: '连接画面' })).toBeEnabled();
+    expect(screen.getByRole('alert')).toHaveTextContent('正在自动重连');
+    expect(screen.getByRole('button', { name: '断开画面' })).toBeEnabled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(link.cameraResponse).toHaveBeenCalledTimes(2);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: '停止' })); });
     expect(link.control).toHaveBeenLastCalledWith('STOP');
     await act(async () => { fireEvent.pointerDown(screen.getByRole('button', { name: '前进' })); });
     await act(async () => { window.dispatchEvent(new Event('blur')); });
+    expect(link.control).toHaveBeenLastCalledWith('STOP');
+  });
+
+  it('reconnects when the JPEG HTTP response stays open but frames freeze', async () => {
+    const link = client();
+    render(<ControlPage api={link.api} role="OPERATOR" />);
+    await act(async () => {});
+    await act(async () => { link.frame(); });
+    expect(screen.getByText('实时画面')).toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(8100); });
+    expect(link.signal().aborted).toBe(true);
+    expect(screen.getByRole('alert')).toHaveTextContent('7 秒未更新');
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(link.cameraResponse).toHaveBeenCalledTimes(2);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: '停止' })); });
     expect(link.control).toHaveBeenLastCalledWith('STOP');
   });
 

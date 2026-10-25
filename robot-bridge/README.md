@@ -1,5 +1,7 @@
 # robot-bridge：SCOUT MINI 的 MQTT ↔ ROS 桥接节点
 
+可选的 H.264/WebRTC 发布端为 `scout_h264_uplink.py`：系统 Python2.7 + ROS CompressedImage + GStreamer `nvv4l2h264enc`，经带独立认证的 RTSPS 向 MediaMTX 发布。不会创建媒体文件，默认不开启；`start-scout.sh --webrtc` 启用。部署前必须按 [`../docs/H264-WEBRTC.md`](../docs/H264-WEBRTC.md) 完成 Xavier 硬件插件检查、TLS/鉴权及云端 WebRTC 配置。原 JPEG 上传不删除。
+
 新增导航与摄像头的完整接入见 [NAVIGATION-CAMERA.md](../docs/NAVIGATION-CAMERA.md)。导航默认关闭，需验证地图/定位/避障并隔离速度话题；摄像头由独立的 `scout-camera-uplink.service` 通过 HTTPS 转发，服务器不保存媒体。
 
 运行在小车工控机上，与松灵驱动 `scout_base` 并列（本次 Xavier 为 ROS1 Melodic + Conda Python3.7，另有 Noetic / ROS2 适配）：

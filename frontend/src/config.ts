@@ -8,6 +8,10 @@ export const REQUEST_TIMEOUT_MS = 12_000;
 export const POLL_INTERVAL_MS = 1_000;
 export const HOLD_INTERVAL_MS = 200;
 
+/** Opt-in until the authenticated MediaMTX/WHEP endpoint is deployed. */
+export const CAMERA_TRANSPORT: 'jpeg' | 'webrtc' =
+  import.meta.env.VITE_CAMERA_TRANSPORT === 'webrtc' ? 'webrtc' : 'jpeg';
+
 export function apiBaseUrlProblem(): string | null {
   if (!API_BASE_URL) return null;
   let url: URL;

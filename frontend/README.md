@@ -12,8 +12,10 @@ SCOUT MINI 远程巡检控制台。前后端分离：本目录是独立的 React
 | 控制 | 按住方向键行驶（每 200 ms 续发）、松开/切页/失焦/退出登录自动 STOP、独立急停；按角色禁用 |
 | 告警 | 级别/状态筛选、分页；MONITOR 可在页面确认告警 |
 | 日志 | 操作类型筛选、分页；后端按角色限制本人/全部范围 |
+| 摄像头 | 默认 JPEG 内存帧流；可选 H.264/WebRTC（WHEP），断线自动重连、连续失败回退 JPEG；浏览器本地拍照/录像 |
+| 导航 | 地图目标点/多点巡逻与 3 米内相对导航，能力就绪后才允许启动 |
 
-未实现：任务下发执行、导航/SLAM、WebSocket 实时推送；移动端使用响应式布局，不做独立移动端应用。
+未实现：原路线/任务数据的自动下发调度、完整实车导航验收；移动端使用响应式布局，不做独立移动端应用。可选的 WebRTC 视频需要部署独立媒体转发服务，详见 [`../docs/H264-WEBRTC.md`](../docs/H264-WEBRTC.md)。
 
 ## 界面预览
 
@@ -92,6 +94,8 @@ npm run build
 ```
 
 产物在 `dist/`。完整服务器部署（nginx、HTTPS、反向代理、限流、验收）见 [`deploy/README.md`](deploy/README.md)。
+
+在验证 MediaMTX、WHEP 鉴权、ICE/UDP 后才使用 `VITE_CAMERA_TRANSPORT=webrtc npm run build`。不设置时继续使用原有 JPEG 模式，避免现有生产站点在媒体服务器未就绪时被切换。WebRTC 信令使用原内存 JWT；不能把 JWT 放入视频 URL。
 
 nginx 配置：
 

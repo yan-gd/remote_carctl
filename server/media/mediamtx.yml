@@ -1,0 +1,53 @@
+# MediaMTX 1.x template: authenticated RTSPS ingest + JWT-gated nginx/WHEP reads.
+# Replace the example publisher password before starting. Do not commit real secrets.
+# Certificate/key must be readable by the unprivileged mediamtx service user.
+logLevel: info
+readTimeout: 10s
+writeTimeout: 10s
+
+authMethod: internal
+authInternalUsers:
+  - user: robot_publisher
+    pass: REPLACE_WITH_RANDOM_PUBLISH_PASSWORD
+    ips: []
+    permissions:
+      - action: publish
+        path: SCOUT-001
+  # nginx's auth_request validates the actual web user's JWT first, then only
+  # nginx (loopback) can reach the unprivileged WHEP reader on port 8889.
+  - user: any
+    pass:
+    ips: [127.0.0.1, ::1]
+    permissions:
+      - action: read
+        path: SCOUT-001
+
+rtsp: true
+rtspEncryption: strict
+rtspTransports: [tcp]
+rtspsAddress: :8322
+rtspServerKey: /etc/remote-carctl/stream-privkey.pem
+rtspServerCert: /etc/remote-carctl/stream-fullchain.pem
+
+rtmp: false
+hls: false
+srt: false
+moq: false
+playback: false
+api: false
+metrics: false
+pprof: false
+
+webrtc: true
+webrtcAddress: 127.0.0.1:8889
+webrtcAllowOrigins: [https://agilex.yoyoyan.cn]
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: ""
+webrtcAdditionalHosts: [agilex.yoyoyan.cn]
+
+paths:
+  SCOUT-001:
+    source: publisher
+    # Allow short overlap during WHEP session refresh for two active viewers.
+    maxReaders: 4
+    record: false

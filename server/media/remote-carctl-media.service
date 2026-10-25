@@ -1,0 +1,22 @@
+[Unit]
+Description=Remote Car H264/WebRTC MediaMTX Relay
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=mediamtx
+Group=mediamtx
+ExecStart=/usr/local/bin/mediamtx /etc/remote-carctl/mediamtx.yml
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

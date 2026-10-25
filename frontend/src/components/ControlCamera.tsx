@@ -3,7 +3,7 @@ import { useCameraStream } from '../camera/useCameraStream';
 import { Card, ErrorNotice, StatusPill } from './UI';
 
 export function ControlCamera({ api }: { api: ApiClient }) {
-  const { canvas, running, frames, fresh, error, toggle } = useCameraStream(api, true);
+  const { canvas, video, transport, running, frames, fresh, error, toggle } = useCameraStream(api, true);
 
   return (
     <Card className="control-camera-card" title="车载视角" actions={
@@ -12,7 +12,9 @@ export function ControlCamera({ api }: { api: ApiClient }) {
       </StatusPill>
     }>
       <div className="camera-stage control-camera-stage">
-        <canvas ref={canvas} width={640} height={480} aria-label="小车实时摄像头画面" />
+        {transport === 'webrtc'
+          ? <video ref={video} autoPlay muted playsInline aria-label="小车 WebRTC 实时摄像头画面" />
+          : <canvas ref={canvas} width={640} height={480} aria-label="小车实时摄像头画面" />}
         {!fresh && <div className="camera-overlay control-camera-overlay">
           <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth="1.2" aria-hidden="true">
@@ -26,7 +28,7 @@ export function ControlCamera({ api }: { api: ApiClient }) {
       </div>
       {error && <ErrorNotice message={error} />}
       <footer className="control-camera-footer">
-        <span className="fine-print">已接收 {frames} 帧 · 仅实时转发</span>
+        <span className="fine-print">{transport === 'webrtc' ? 'H.264 / WebRTC' : 'JPEG 兼容'} · 已接收 {frames} 帧</span>
         <button type="button" className="button ghost small" onClick={toggle}>
           {running ? '断开画面' : '连接画面'}
         </button>

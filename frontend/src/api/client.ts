@@ -139,6 +139,32 @@ export class ApiClient {
     return response;
   }
 
+  /** Same-origin WHEP signaling, checked by nginx against /api/v1/auth/me.
+   * The JWT is never put in a URL, and cannot be sent to an arbitrary Location.
+   */
+  async whepRequest(method: 'POST' | 'DELETE', path: string, signal: AbortSignal, sdp?: string): Promise<Response> {
+    if (!/^\/webrtc\/SCOUT-001\/whep(?:\/[A-Za-z0-9_-]+)?$/.test(path)) {
+      throw new ApiError(400, 'INVALID_WHEP_PATH', '视频会话地址无效。');
+    }
+    const tokenAtSend = this.token;
+    // WHEP is an nginx endpoint on the web origin, even if an API override is set.
+    // Keep the JWT off a separately configured backend host.
+    const response = await this.fetchImpl.call(globalThis, path, {
+      method,
+      headers: {
+        ...(tokenAtSend ? { Authorization: `Bearer ${tokenAtSend}` } : {}),
+        ...(sdp !== undefined ? { 'Content-Type': 'application/sdp', Accept: 'application/sdp' } : {}),
+      },
+      body: sdp,
+      credentials: 'omit', cache: 'no-store', signal,
+    });
+    if (!response.ok) {
+      if (response.status === 401) this.notifyUnauthorized(tokenAtSend);
+      throw new ApiError(response.status, 'WHEP_ERROR', fallbackMessage(response.status));
+    }
+    return response;
+  }
+
   control(command: string): Promise<ControlResult> {
     return this.request<ControlResult>('/api/v1/robot/control', {
       method: 'POST',

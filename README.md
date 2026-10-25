@@ -18,6 +18,8 @@
 
 **附近几米内的目标**：新增[3 米内相对目标与实时激光避障](docs/RELATIVE-NAVIGATION.md)，无需预存地图，用 `bash robot-bridge/start-scout.sh --relative` 启动；沿用当前终端运行方式，保留固定地图模式。此模式代码与本地测试不代表实车避障/到达已验收。
 
+**可选 H.264/WebRTC 视频**：新增[低延迟视频接入和部署指南](docs/H264-WEBRTC.md)。Xavier 使用 GStreamer 硬件编码经 RTSPS 推流到 MediaMTX，浏览器通过现有 JWT 鉴权的 WHEP 接收；旧 JPEG 模式保留。新链路尚未完成 Xavier/公网实测，需先完成服务器鉴权、TLS 与 ICE 部署，再使用 `bash robot-bridge/start-scout.sh --webrtc` 和 `VITE_CAMERA_TRANSPORT=webrtc` 前端构建。
+
 ## 1. 工作方式
 
 ```text

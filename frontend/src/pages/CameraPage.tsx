@@ -4,7 +4,7 @@ import { useCameraStream } from '../camera/useCameraStream';
 import { Card, ErrorNotice, StatusPill, errorMessage } from '../components/UI';
 
 export function CameraPage({ api }: { api: ApiClient }) {
-  const { canvas, running, frames, fresh, error: streamError, toggle } = useCameraStream(api);
+  const { canvas, video, transport, running, frames, fresh, error: streamError, toggle } = useCameraStream(api);
   const capture = useRef<MediaRecorder | null>(null);
   const recordingTimer = useRef<number | undefined>(undefined);
   const urls = useRef<string[]>([]);
@@ -46,8 +46,23 @@ export function CameraPage({ api }: { api: ApiClient }) {
     photoRequest.current = controller;
     const timer = window.setTimeout(() => controller.abort(), 7000);
     try {
-      const response = await api.cameraResponse('snapshot', controller.signal);
-      const blob = await response.blob();
+      let blob: Blob;
+      if (transport === 'webrtc') {
+        if (!fresh || !video.current || video.current.videoWidth === 0) {
+          throw new Error('尚未收到可拍摄的实时画面。');
+        }
+        const output = document.createElement('canvas');
+        output.width = video.current.videoWidth;
+        output.height = video.current.videoHeight;
+        const context = output.getContext('2d');
+        if (!context) throw new Error('浏览器无法生成照片。');
+        context.drawImage(video.current, 0, 0);
+        blob = await new Promise<Blob>((resolve, reject) => output.toBlob(
+          value => value ? resolve(value) : reject(new Error('照片编码失败。')), 'image/jpeg', 0.85));
+      } else {
+        const response = await api.cameraResponse('snapshot', controller.signal);
+        blob = await response.blob();
+      }
       if (!mounted.current || controller.signal.aborted) return;
       if (photo) URL.revokeObjectURL(photo);
       setPhoto(blobUrl(blob));
@@ -62,15 +77,21 @@ export function CameraPage({ api }: { api: ApiClient }) {
 
   function record() {
     setError(null);
-    if (!canvas.current || !fresh) return;
+    if (!(transport === 'webrtc' ? video.current : canvas.current) || !fresh) return;
     const mime = ['video/webm;codecs=vp8', 'video/webm', 'video/mp4'].find(type =>
       typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type));
-    if (!mime || !canvas.current.captureStream) {
+    if (!mime || (transport === 'jpeg' && !canvas.current?.captureStream)) {
       setError('当前浏览器不支持录制，请使用新版 Chrome 或 Edge。'); return;
     }
     let stream: MediaStream | null = null;
     try {
-      stream = canvas.current.captureStream(8);
+      if (transport === 'webrtc') {
+        const incoming = video.current?.srcObject;
+        if (!(incoming instanceof MediaStream)) throw new Error('WebRTC 视频流不可用。');
+        stream = new MediaStream(incoming.getVideoTracks().map(track => track.clone()));
+      } else {
+        stream = canvas.current!.captureStream(8);
+      }
       const tracks = stream.getTracks();
       const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 700_000 });
       const chunks: Blob[] = [];
@@ -106,7 +127,9 @@ export function CameraPage({ api }: { api: ApiClient }) {
     <Card title="实时摄像头" actions={<StatusPill tone={fresh ? 'ok' : 'warn'}>
       {fresh ? '实时画面' : running ? '等待新画面' : '未连接'}</StatusPill>}>
       <div className="camera-stage">
-        <canvas ref={canvas} width={640} height={480} aria-label="小车实时摄像头画面" />
+        {transport === 'webrtc'
+          ? <video ref={video} autoPlay muted playsInline aria-label="小车 WebRTC 实时摄像头画面" />
+          : <canvas ref={canvas} width={640} height={480} aria-label="小车实时摄像头画面" />}
         {!fresh && <div className="camera-overlay">{running ? '等待摄像头上传新帧…' : '连接摄像头后查看实时画面'}</div>}
       </div>
       <div className="camera-actions">
@@ -117,9 +140,9 @@ export function CameraPage({ api }: { api: ApiClient }) {
         <button className="button" onClick={() => void takePhoto()}>拍照</button>
         <button className="button" disabled={!recording && !fresh} onClick={recording ? stopRecording : record}>
           {recording ? '结束录像' : '录制30秒内视频'}</button>
-        <span className="fine-print">已接收 {frames} 帧 · 服务端不保存</span>
+        <span className="fine-print">{transport === 'webrtc' ? 'H.264 / WebRTC' : 'JPEG 兼容'} · 已接收 {frames} 帧 · 服务端不保存</span>
       </div>
-      <p className="fine-print">摄像头视频帧经 HTTPS 上传后实时转发；服务端不写文件、不存数据库、不提供历史录像。
+      <p className="fine-print">摄像头画面通过 WebRTC 或 HTTPS/JPEG 实时传输；服务端不写文件、不存数据库、不提供历史录像。
         拍照和录像仅在当前浏览器内存中预览，需保留时下载到你的电脑。离开页面即释放。</p>
     </Card>
     {(photo || clip) && <Card title="本次拍摄 · 仅当前浏览器">
