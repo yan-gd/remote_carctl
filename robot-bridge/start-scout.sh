@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Foreground launcher for this Xavier: ROS1 Melodic + Conda Python 3.7.
-# Run as agilex: bash start-scout.sh [--no-camera] [--relative] [--webrtc]
+# Run as agilex: bash start-scout.sh [--no-camera] [--relative|--direct] [--webrtc]
 set -eo pipefail
 
 SCOUT_DIR=/home/agilex/Desktop/remote_carctl/robot-bridge
@@ -8,6 +8,7 @@ SCOUT_PY2=/usr/bin/python2.7
 SCOUT_PY3=/home/agilex/archiconda3/bin/python3
 SCOUT_CAMERA=1
 SCOUT_RELATIVE=0
+SCOUT_DIRECT=0
 SCOUT_WEBRTC=0
 SCOUT_CLIENTS=()
 SCOUT_DRIVERS=()
@@ -17,8 +18,9 @@ for SCOUT_ARG in "$@"; do
     case "$SCOUT_ARG" in
         --no-camera) SCOUT_CAMERA=0 ;;
         --relative) SCOUT_RELATIVE=1 ;;
+        --direct) SCOUT_RELATIVE=1; SCOUT_DIRECT=1 ;;
         --webrtc) SCOUT_WEBRTC=1 ;;
-        *) echo 'Usage: bash start-scout.sh [--no-camera] [--relative] [--webrtc]' >&2; exit 2 ;;
+        *) echo 'Usage: bash start-scout.sh [--no-camera] [--relative|--direct] [--webrtc]' >&2; exit 2 ;;
     esac
 done
 
@@ -41,9 +43,11 @@ if (( SCOUT_RELATIVE )); then
     # Validate dependencies before stopping any existing managed services.
     "$SCOUT_PY2" -c 'import tf2_ros'
     "$SCOUT_PY3" -c 'import actionlib; from move_base_msgs.msg import MoveBaseAction'
-    for SCOUT_PACKAGE in move_base navfn base_local_planner rslidar_sdk pointcloud_to_laserscan; do
-        rospack find "$SCOUT_PACKAGE" >/dev/null
-    done
+    if (( ! SCOUT_DIRECT )); then
+        for SCOUT_PACKAGE in move_base navfn base_local_planner rslidar_sdk pointcloud_to_laserscan; do
+            rospack find "$SCOUT_PACKAGE" >/dev/null
+        done
+    fi
 fi
 
 sudo -v
@@ -135,11 +139,14 @@ done
 
 SCOUT_BRIDGE_ARGS=()
 if (( SCOUT_RELATIVE )); then
-    env -u PATROL_CAMERA_DEVICE_KEY "$SCOUT_PY2" /opt/ros/melodic/bin/roslaunch "$SCOUT_DIR/launch/cloud_sensors.launch" &
-    SCOUT_DRIVERS+=("$!")
-    env -u PATROL_CAMERA_DEVICE_KEY "$SCOUT_PY2" /opt/ros/melodic/bin/roslaunch "$SCOUT_DIR/launch/cloud_relative_navigation.launch" &
-    SCOUT_DRIVERS+=("$!")
+    if (( ! SCOUT_DIRECT )); then
+        env -u PATROL_CAMERA_DEVICE_KEY "$SCOUT_PY2" /opt/ros/melodic/bin/roslaunch "$SCOUT_DIR/launch/cloud_sensors.launch" &
+        SCOUT_DRIVERS+=("$!")
+        env -u PATROL_CAMERA_DEVICE_KEY "$SCOUT_PY2" /opt/ros/melodic/bin/roslaunch "$SCOUT_DIR/launch/cloud_relative_navigation.launch" &
+        SCOUT_DRIVERS+=("$!")
+    fi
     SCOUT_BRIDGE_ARGS+=(--navigation-mode relative)
+    if (( SCOUT_DIRECT )); then SCOUT_BRIDGE_ARGS+=(--navigation-direct); fi
 fi
 
 "$SCOUT_PY3" -u scout_mqtt_bridge.py --ros 1 --config config.yaml "${SCOUT_BRIDGE_ARGS[@]}" &

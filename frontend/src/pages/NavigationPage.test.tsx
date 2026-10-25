@@ -54,6 +54,19 @@ describe('autonomous navigation page',()=>{
     view.unmount();
     expect(api.cancelNavigation).not.toHaveBeenCalled();
   });
+  it('labels direct odometry mode as having no obstacle avoidance',async()=>{
+    const api=client();
+    api.navigationStatus.mockResolvedValue({...ready,robot:{...ready.robot!,mode:'relative',frame:'odom',mapId:'direct-session'}});
+    render(<NavigationPage api={api as unknown as ApiClient} role="OPERATOR"/>);
+    await act(async()=>{});
+    expect(screen.getByText('附近目标 · 纯里程计（无避障）')).toBeInTheDocument();
+    expect(screen.getByText(/可能撞到人或障碍物/)).toBeInTheDocument();
+    expect(screen.queryByText('附近目标 · 实时避障')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('前后距离'),{target:{value:'1'}});
+    fireEvent.change(screen.getByLabelText('左右距离'),{target:{value:'0'}});
+    await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'开始导航'}));});
+    expect(api.startNavigation).toHaveBeenCalledWith({mapId:'direct-session',cycles:1,points:[{x:1,y:0,yaw:0}]});
+  });
   it('rejects diagonal goals beyond 3m and resets coordinates when mode changes',async()=>{
     const api=client();
     render(<NavigationPage api={api as unknown as ApiClient} role="OPERATOR"/>);

@@ -249,6 +249,7 @@ def parse_args(argv):
     parser.add_argument("--host", help="overrides mqtt.host")
     parser.add_argument("--port", type=int, help="overrides mqtt.port")
     parser.add_argument("--navigation-mode", choices=("map", "relative"), help="explicitly enable the selected navigation mode")
+    parser.add_argument("--navigation-direct", action="store_true", help="opt in to odometry-only relative goals without obstacle avoidance")
     parser.add_argument("--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR"))
     return parser.parse_args(argv)
 
@@ -263,6 +264,9 @@ def build_config(args):
     if getattr(args, 'navigation_mode', None):
         overrides.setdefault('navigation', {})
         overrides['navigation'].update(enabled=True, mode=args.navigation_mode)
+    if getattr(args, 'navigation_direct', False):
+        overrides.setdefault('navigation', {})
+        overrides['navigation']['direct'] = True
     for key, value in (("host", args.host), ("port", args.port)):
         if value is not None:
             overrides.setdefault("mqtt", {})

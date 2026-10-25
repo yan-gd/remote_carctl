@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import test_navigation as fixtures
 from scout_bridge_core import load_config, ConfigError
-from scout_navigation import RelativeRos1NavigationAdapter, relative_goal
+from scout_navigation import DirectOdomNavigationAdapter, RelativeRos1NavigationAdapter, direct_velocity, relative_goal
 
 
 class RelativeGeometryTest(unittest.TestCase):
@@ -36,6 +36,32 @@ class RelativeGeometryTest(unittest.TestCase):
         with self.assertRaises(ConfigError):
             load_config({'navigation': {'mode': 'anything'}})
 
+    def test_direct_navigation_is_opt_in_and_never_uses_map_mode(self):
+        self.assertFalse(load_config({'navigation': {'mode': 'relative'}})['navigation']['direct'])
+        self.assertTrue(load_config({'navigation': {'mode': 'relative', 'direct': True}})['navigation']['direct'])
+        for config in ({'mode': 'map', 'direct': True}, {'mode': 'relative', 'direct': 'yes'}):
+            with self.subTest(config=config), self.assertRaises(ConfigError):
+                load_config({'navigation': config})
+
+    def test_direct_velocity_rotates_then_drives_and_finishes_at_correct_heading(self):
+        target = dict(x=1, y=0, yaw=math.pi/2)
+        self.assertEqual((0.0, -0.25, False), direct_velocity(0, 0, math.pi, target))
+        linear, angular, reached = direct_velocity(0, 0, 0, target)
+        self.assertTrue(0 < linear <= .10)
+        self.assertEqual(0, angular)
+        self.assertFalse(reached)
+        self.assertEqual((0, 0.25, False), direct_velocity(1, 0, 0, target))
+        self.assertEqual((0, 0, True), direct_velocity(1, 0, math.pi/2, target))
+        self.assertTrue(direct_velocity(1.04, 0, math.pi/2+.10, target)[2])
+
+    def test_direct_velocity_never_reverses_and_reaches_wrapped_yaw(self):
+        target = dict(x=-1, y=0, yaw=-math.pi+0.02)
+        linear, angular, done = direct_velocity(0, 0, 0, target)
+        self.assertEqual(0, linear)
+        self.assertNotEqual(0, angular)
+        self.assertFalse(done)
+        self.assertEqual((0, 0, True), direct_velocity(-1, 0, math.pi-0.02, target))
+
     def test_cli_enables_relative_without_rewriting_mqtt_credentials(self):
         from scout_mqtt_bridge import parse_args, build_config
         with patch('scout_mqtt_bridge.read_config_file', return_value={
@@ -45,6 +71,39 @@ class RelativeGeometryTest(unittest.TestCase):
         self.assertEqual('relative', config['navigation']['mode'])
         self.assertEqual('192.0.2.10', config['mqtt']['host'])
         self.assertEqual('test-only', config['mqtt']['password'])
+
+    def test_direct_cli_explicitly_enables_odometry_only_mode(self):
+        from scout_mqtt_bridge import parse_args, build_config
+        with patch('scout_mqtt_bridge.read_config_file', return_value={
+                'mqtt': {'host': '192.0.2.10', 'username': 'robot', 'password': 'test-only'}}):
+            config = build_config(parse_args(['--ros', '1', '--navigation-mode', 'relative', '--navigation-direct']))
+        self.assertTrue(config['navigation']['enabled'])
+        self.assertTrue(config['navigation']['direct'])
+        self.assertEqual('relative', config['navigation']['mode'])
+
+    def test_direct_adapter_does_not_consult_grid_or_move_base(self):
+        adapter = object.__new__(DirectOdomNavigationAdapter)
+        self.assertTrue(adapter.goal_allowed(dict(x=1, y=0, yaw=0)))
+        sent = []
+        adapter.velocity_callback = lambda linear, angular: sent.append((linear, angular))
+        adapter._velocity(NS(linear=NS(x=1), angular=NS(z=1)))
+        self.assertEqual([], sent)
+
+    def test_direct_health_uses_odom_and_chassis_not_lidar_or_move_base(self):
+        source = fixtures.GridTest().health_adapter()
+        adapter = object.__new__(DirectOdomNavigationAdapter)
+        adapter.__dict__.update(source.__dict__)
+        adapter.map = None
+        adapter.scan_at = adapter.costmap_at = 0
+        adapter.client.wait_for_server = lambda _: False
+        adapter.pose.header.frame_id = 'odom'
+        adapter.reference_id = adapter.map_id = 'direct-123'
+        self.assertTrue(adapter._check_health()['ready'])
+        adapter.telemetry.chassis_connected = lambda: False
+        self.assertEqual('CHASSIS_UNAVAILABLE', adapter._check_health()['reason'])
+        adapter.telemetry.chassis_connected = lambda: True
+        adapter.pose_at -= 1
+        self.assertEqual('LOCALIZATION_UNAVAILABLE', adapter._check_health()['reason'])
 
 
 class RelativeManagerTest(unittest.TestCase):
@@ -126,6 +185,20 @@ class RelativeManagerTest(unittest.TestCase):
         done(3)
         self.assertEqual('CANCELLED', self.nav.state)
         self.assertEqual((0,0), self.fixture.ros.velocities[-1])
+
+    def test_old_direct_worker_cannot_steer_a_new_mission(self):
+        self.nav.config = dict(self.nav.config, direct=True)
+        self.start()
+        old_worker_velocity = self.adapter.velocity_callback
+        old_worker_velocity(0.1, 0.15)
+        self.assertEqual((0.1, 0.15), self.nav.velocity)
+        self.nav.cancel('CLOUD_CANCEL')
+        self.start()
+        new_worker_velocity = self.adapter.velocity_callback
+        old_worker_velocity(0.1, -0.2)
+        self.assertEqual((0.0, 0.0), self.nav.velocity)
+        new_worker_velocity(0.1, 0.1)
+        self.assertEqual((0.1, 0.1), self.nav.velocity)
 
     def test_cumulative_detour_is_bounded_even_when_robot_returns_near_start(self):
         self.start()

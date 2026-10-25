@@ -29,6 +29,27 @@ def relative_goal(point, x, y, yaw):
                 yaw=math.atan2(math.sin(heading), math.cos(heading)))
 
 
+def direct_velocity(x, y, yaw, goal):
+    """Conservative odometry-only guidance for a *cleared, supervised* test area.
+
+    This deliberately has no obstacle sensing.  Velocity only reaches the robot
+    through the existing lease/STOP arbiter, never a direct /cmd_vel publisher.
+    """
+    distance = math.hypot(goal['x'] - x, goal['y'] - y)
+    if distance <= 0.12:
+        error = math.atan2(math.sin(goal['yaw'] - yaw), math.cos(goal['yaw'] - yaw))
+        if abs(error) <= 0.15:
+            return (0.0, 0.0, True)
+        return (0.0, max(-0.25, min(0.25, 1.2 * error)), False)
+    heading = math.atan2(goal['y'] - y, goal['x'] - x)
+    error = math.atan2(math.sin(heading - yaw), math.cos(heading - yaw))
+    angular = max(-0.25, min(0.25, 1.2 * error))
+    if abs(error) > 0.35:
+        return (0.0, angular, False)
+    linear = min(0.10, max(0.025, 0.5 * distance)) * max(0.25, 1.0 - abs(error) / 0.5)
+    return (linear, angular, False)
+
+
 class NavigationManager:
     def __init__(self, config, adapter, send_velocity, clock=time.monotonic, wall=time.time):
         self.config = config
@@ -133,6 +154,11 @@ class NavigationManager:
         self.velocity = (0.0, 0.0)
         self.velocity_at = 0
         try:
+            if self.config.get('direct'):
+                # Each worker keeps its own callback. A cancelled worker must
+                # never feed velocity into a later mission after START/STOP.
+                self.adapter.velocity_callback = lambda linear, angular: self.accept_velocity(
+                    linear, angular, generation)
             self.adapter.send_goal(self.points[self.index], lambda result: self.finished(result, generation))
         except Exception:
             self.cancel('GOAL_DELIVERY_FAILED')
@@ -147,16 +173,17 @@ class NavigationManager:
                 if self.index < len(self.points):
                     self._next()
                 else:
-                    self.state, self.reason = 'SUCCEEDED', 'MOVE_BASE_SUCCEEDED'
+                    self.state, self.reason = 'SUCCEEDED', ('ODOM_GOAL_REACHED' if self.config.get('direct')
+                                                            else 'MOVE_BASE_SUCCEEDED')
                     self.velocity = (0.0, 0.0)
             else:
                 self.state = TERMINAL.get(result, 'ABORTED')
-                self.reason = 'MOVE_BASE_RESULT_%s' % result
+                self.reason = ('ODOM_RESULT_%s' if self.config.get('direct') else 'MOVE_BASE_RESULT_%s') % result
                 self.velocity = (0.0, 0.0)
 
-    def accept_velocity(self, linear, angular):
+    def accept_velocity(self, linear, angular, generation=None):
         with self.lock:
-            if self.state != 'ACTIVE':
+            if self.state != 'ACTIVE' or (generation is not None and generation != self.generation):
                 return
             if not math.isfinite(linear) or not math.isfinite(angular):
                 self.cancel('INVALID_NAVIGATION_VELOCITY')
@@ -423,12 +450,113 @@ class RelativeRos1NavigationAdapter(Ros1NavigationAdapter):
         return [relative_goal(p, health['x'], health['y'], health['yaw']) for p in points]
 
 
+class DirectOdomNavigationAdapter(RelativeRos1NavigationAdapter):
+    """Explicit opt-in odometry-only navigation, without automatic avoidance.
+
+    Intended solely for cleared, supervised test areas. The existing exclusive
+    /cmd_vel publisher, MQTT lease, odometry health, distance/time limit and
+    emergency STOP remain authoritative.
+    """
+
+    def __init__(self, config, ros, telemetry):
+        self._direct_generation = 0
+        super().__init__(config, ros, telemetry)
+        self.reference_id = 'direct-' + uuid.uuid4().hex
+        self.map_id = self.reference_id
+
+    def _map(self, msg):
+        # Lidar maps never enter the admission or control path in this mode.
+        pass
+
+    def _velocity(self, msg):
+        # An old move_base /navigation/cmd_vel publisher must not steer the
+        # odometry controller even if it survived the launcher transition.
+        pass
+
+    def _pose(self, msg):
+        super()._pose(msg)
+        # Invalidate the old mission when odometry jumps, without requiring a
+        # fresh costmap to establish the new odometry session.
+        if self.map_id is None or not self.reference_id.startswith('direct-'):
+            self.reference_id = 'direct-' + uuid.uuid4().hex
+            self.map_id = self.reference_id
+
+    def _check_health(self):
+        result = dict(ready=False, reason='LOCALIZATION_UNAVAILABLE', map_id=self.map_id,
+                      frame='odom', x=None, y=None, yaw=None)
+        try:
+            if not self.telemetry.chassis_connected():
+                result['reason'] = 'CHASSIS_UNAVAILABLE'
+                return result
+            pose = self.pose
+            if (self.pose_process.poll() is not None or pose is None
+                    or time.monotonic() - self.pose_at > 0.75
+                    or pose.header.frame_id != 'odom'
+                    or abs((self.rospy.Time.now() - pose.header.stamp).to_sec()) > 1.5):
+                return result
+            q = pose.pose.orientation
+            yaw = math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y*q.y + q.z*q.z))
+            values = (pose.pose.position.x, pose.pose.position.y, yaw)
+            if not all(math.isfinite(value) for value in values):
+                return result
+            result.update(x=values[0], y=values[1], yaw=values[2])
+            result['reason'] = 'DIRECT_CMD_VEL_PUBLISHER'
+            code, _, system = self.rospy.get_master().getSystemState()
+            if code != 1:
+                return result
+            publishers = dict(system[0]).get(self.ros._publisher.resolved_name, [])
+            if any(name != self.rospy.get_name() for name in publishers):
+                return result
+            result.update(ready=True, reason='READY')
+            return result
+        except Exception:
+            return result
+
+    def goal_allowed(self, point):
+        # The operator, not radar, confirms the complete travel path is clear.
+        return True
+
+    def send_goal(self, point, done):
+        self._direct_generation += 1
+        generation = self._direct_generation
+        velocity = self.velocity_callback  # Mission-scoped; do not read again in the worker.
+        worker = threading.Thread(target=self._drive, args=(point, done, generation, velocity), daemon=True)
+        worker.start()
+
+    def _drive(self, point, done, generation, velocity):
+        try:
+            while not self.rospy.is_shutdown() and generation == self._direct_generation:
+                health = self.health()
+                if not health.get('ready') or health.get('map_id') != self.map_id:
+                    velocity(0.0, 0.0)
+                    if generation == self._direct_generation:
+                        done(4)
+                    return
+                linear, angular, arrived = direct_velocity(health['x'], health['y'], health['yaw'], point)
+                if arrived:
+                    velocity(0.0, 0.0)
+                    if generation == self._direct_generation:
+                        done(3)
+                    return
+                velocity(linear, angular)
+                time.sleep(0.1)
+        except Exception:
+            velocity(0.0, 0.0)
+            if generation == self._direct_generation:
+                done(4)
+
+    def cancel(self):
+        self._direct_generation += 1
+
+
 def build_navigation(config, ros, telemetry, send):
     if not config['enabled']:
         return None
     if ros.name != 'ros1':
         raise ConfigError('Navigation currently supports ROS1 move_base only')
-    adapter_type = RelativeRos1NavigationAdapter if config.get('mode', 'map') == 'relative' else Ros1NavigationAdapter
+    adapter_type = (DirectOdomNavigationAdapter if config.get('direct') else
+                    RelativeRos1NavigationAdapter if config.get('mode', 'map') == 'relative' else
+                    Ros1NavigationAdapter)
     adapter = adapter_type(config, ros, telemetry)
     manager = NavigationManager(config, adapter, send)
     adapter.velocity_callback = manager.accept_velocity

@@ -51,7 +51,7 @@ DEFAULT_CONFIG = {
         "status_topic": "/scout_status",
     },
     "sim": {"battery_voltage": None},
-    "navigation": {"enabled": False, "mode": "map", "action": "/move_base", "frame": "map", "base_frame": "base_link",
+    "navigation": {"enabled": False, "mode": "map", "direct": False, "action": "/move_base", "frame": "map", "base_frame": "base_link",
                    "pose_topic": "/patrol/navigation_pose", "pose_python": "/usr/bin/python2.7",
                    "map_topic": "/map", "scan_topic": "/scan", "costmap_topic": "/move_base/local_costmap/costmap",
                    "velocity_topic": "/navigation/cmd_vel", "max_linear": 0.2, "max_angular": 0.4, "goal_timeout": 180},
@@ -103,6 +103,8 @@ def _validate(config):
         raise ConfigError('navigation.enabled must be boolean')
     if nav['mode'] not in ('map', 'relative'):
         raise ConfigError('navigation.mode must be map or relative')
+    if not isinstance(nav['direct'], bool) or (nav['direct'] and nav['mode'] != 'relative'):
+        raise ConfigError('navigation.direct requires relative mode and a boolean value')
     for key in ('action', 'frame', 'base_frame', 'map_topic', 'scan_topic', 'costmap_topic', 'velocity_topic', 'pose_topic', 'pose_python'):
         if not isinstance(nav[key], str) or not nav[key]:
             raise ConfigError('navigation.%s must be nonempty' % key)

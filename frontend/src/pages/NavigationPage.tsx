@@ -16,6 +16,9 @@ const REASONS: Record<string,string> = {
   RELATIVE_SINGLE_GOAL_ONLY:'相对导航仅支持单个目标、执行一次',
   RELATIVE_TRAVEL_LIMIT:'绕行距离达到限制，已停止',
   GOAL_NOT_IN_FREE_MAP_SPACE:'目标或周围空间未被确认可通行，请选择雷达可见的空闲区域',
+  CHASSIS_UNAVAILABLE:'底盘连接或里程计状态异常，已禁止导航',
+  ODOM_GOAL_REACHED:'里程计已达到目标误差范围（请现场确认实际位置）',
+  ODOM_RESULT_4:'纯里程计目标执行失败，已停车',
   NAVIGATION_MODE_MISMATCH:'导航模式不一致，请更新服务器并刷新页面',
   NAVIGATION_HEALTH_LOST:'传感器、定位或导航参考失效，已停止',
   GOAL_TIMEOUT:'目标执行超时，已停止',
@@ -35,6 +38,7 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
   const canStop=canMove||role==='MONITOR';
   const mission=!!status?.active || ['ACTIVE','PENDING'].includes(status?.robot?.state??'');
   const relative=status?.robot?.mode==='relative';
+  const direct=relative&&!!status?.robot?.mapId?.startsWith('direct-');
   const mode=relative?'relative':'map';
 
   useEffect(()=>{
@@ -72,7 +76,7 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
       if(!status?.robot?.mapId)throw new Error('导航参考尚未就绪。');
       await api.startNavigation({mapId:status.robot.mapId,points:parsed,cycles:relative?1:Number(cycles)});
       if(!alive.current)return;
-      setNotice(relative?'相对目标已发给Broker，等待小车确认；开始时的位置和朝向会被固定，可切换摄像头查看。':'目标点已发给Broker，等待真实move_base反馈；可切换摄像头查看，巡逻由后端持续续约。');
+      setNotice(direct?'纯里程计目标已发给小车；无自动避障，必须在清空障碍的场地由现场人员监护。':relative?'相对目标已发给Broker，等待小车确认；开始时的位置和朝向会被固定，可切换摄像头查看。':'目标点已发给Broker，等待真实move_base反馈；可切换摄像头查看，巡逻由后端持续续约。');
       const next=await api.navigationStatus();
       if(alive.current)setStatus(next);
     }catch(e){if(alive.current)setError(errorMessage(e));}finally{if(alive.current)setBusy(false);}
@@ -86,15 +90,17 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
   }
 
   const robot=status?.robot;
-  const reason=relative&&status?.reason==='READY'?'实时激光障碍地图与里程计已就绪':
+  const reason=direct&&status?.reason==='READY'?'里程计和底盘已就绪（没有自动避障）':
+    relative&&status?.reason==='READY'?'实时激光障碍地图与里程计已就绪':
     relative&&status?.reason==='LOCALIZATION_UNAVAILABLE'?'odom → base_link里程计位姿不可用':
     REASONS[status?.reason??'']??status?.reason??'正在检查导航能力…';
   return <div className={`stack navigation-page${relative?' is-relative':''}`}>
     {error&&<ErrorNotice message={error}/>}
     {notice&&<div className="notice notice-info">{notice}</div>}
-    <Card title={relative?'附近目标 · 实时避障':'目标点导航 / 多点巡逻'} actions={<StatusPill tone={status?.ready?'ok':'warn'}>{mission?(relative?'正在前往目标':'自主巡逻中'):status?.ready?'导航就绪':'尚未就绪'}</StatusPill>}>
+    <Card title={direct?'附近目标 · 纯里程计（无避障）':relative?'附近目标 · 实时避障':'目标点导航 / 多点巡逻'} actions={<StatusPill tone={status?.ready?'ok':'warn'}>{mission?(relative?'正在前往目标':'自主巡逻中'):status?.ready?'导航就绪':'尚未就绪'}</StatusPill>}>
       <p className="muted">{reason}</p>
-      <p className="fine-print">{relative?'以小车接受目标时的位置和朝向为起点，前方为X正方向、左侧为Y正方向。仅单点，直线距离0.1至3米；无需预存地图，使用实时激光障碍数据。':'仅使用已有地图的 map 坐标。小车自主规划与避障。'}切页或关闭浏览器后继续；需结束请主动停止。后端/MQTT失联时3秒租约到期停车。</p>
+      {direct&&<p className="notice notice-error">此模式没有自动避障能力：可能撞到人或障碍物。仅在清空行驶路径、现场有人监护且能立即急停时使用。</p>}
+      <p className="fine-print">{direct?'以收到目标时的里程计位姿为起点，前方为X正方向、左侧为Y正方向。小车先转向再前进，目标距离0.1至3米，无雷达安全检查。':relative?'以小车接受目标时的位置和朝向为起点，前方为X正方向、左侧为Y正方向。仅单点，直线距离0.1至3米；无需预存地图，使用实时激光障碍数据。':'仅使用已有地图的 map 坐标。小车自主规划与避障。'}切页或关闭浏览器后继续；需结束请主动停止。后端/MQTT失联时3秒租约到期停车。</p>
       <div className="control-readout navigation-readout">
         <div><dt>真实执行状态</dt><dd>{robot?.state??'UNKNOWN'}</dd></div>
         <div><dt>点位进度</dt><dd>{robot?`${robot.pointIndex} / ${robot.totalPoints}`:'—'}</dd></div>
@@ -118,8 +124,8 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
         <button className="button primary" disabled={!canMove||!status?.ready||!!mission||busy} onClick={()=>void start()}>开始导航</button>
         <button className="button danger" disabled={!canStop||busy} onClick={()=>void cancel()}>取消导航并停止</button>
       </div>
-      {relative&&<p className="fine-print">例如前方2米、左侧1米：填写 X=2、Y=1、朝向=0。雷达未观测区域或目标周围有障碍时会拒绝；无法绕行会终止，最多执行60秒。</p>}
-      {!status?.ready&&<p className="notice notice-info">{relative?'请保持底盘、雷达及相对导航进程运行，等待实时数据就绪；也可以继续人工遥控。':'可继续使用“控制”页人工遥控；地图、定位和避障条件就绪后再启动导航。'}</p>}
+      {relative&&<p className="fine-print">例如前方2米、左侧1米：填写 X=2、Y=1、朝向=0。{direct?'直接按里程计转向及前进，不绕开障碍；位置丢失或超时会停车，最多执行60秒。':'雷达未观测区域或目标周围有障碍时会拒绝；无法绕行会终止，最多执行60秒。'}</p>}
+      {!status?.ready&&<p className="notice notice-info">{direct?'请检查底盘、里程计定位及速度话题是否正常；本模式不需要雷达。':relative?'请保持底盘、雷达及相对导航进程运行，等待实时数据就绪；也可以继续人工遥控。':'可继续使用“控制”页人工遥控；地图、定位和避障条件就绪后再启动导航。'}</p>}
     </Card>
   </div>;
 }
