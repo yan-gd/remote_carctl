@@ -65,9 +65,6 @@ class NavigationManager:
         self.lease_at = 0
         self.goal_at = 0
         self.map_id = None
-        self.map_snapshot = (None, None)
-        self.map_lock = threading.Lock()
-        self.map_generation = 0
         self.velocity = (0.0, 0.0)
         self.velocity_at = 0
         self.generation = 0
@@ -260,6 +257,11 @@ class Ros1NavigationAdapter:
         self.pose_at = 0
         self.map = None
         self.map_id = None
+        # Initialize before subscribing: ROS can immediately deliver a latched map.
+        # Both the map callback and WebMapping lifecycle access this adapter state.
+        self.map_snapshot = (None, None)
+        self.map_lock = threading.Lock()
+        self.map_generation = 0
         self.confirmed_map = None
         self.scan_at = self.costmap_at = 0
         self.health_at = 0

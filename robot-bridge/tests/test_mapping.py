@@ -1,4 +1,5 @@
 import base64
+from contextlib import contextmanager
 import tempfile
 import threading
 import time
@@ -9,12 +10,79 @@ from unittest.mock import Mock, patch
 import yaml
 from scout_mapping import map_display, save_grid, saved_map, validate_settings, WebMapping
 from scout_bridge_core import BridgeCore, TelemetryCache, load_config
+from scout_navigation import Ros1NavigationAdapter
 
 
 def grid(w=2, h=2, data=None):
     return S(info=S(width=w, height=h, resolution=0.05,
                     origin=S(position=S(x=-1., y=2.), orientation=S(z=0., w=1.))),
              data=data if data is not None else [0, 100, -1, 0])
+
+
+@contextmanager
+def ros_runtime(on_subscribe=None):
+    # Stub external ROS/process boundaries, but execute the actual adapter constructor.
+    rospy = S(Subscriber=Mock(side_effect=on_subscribe), Publisher=Mock(),
+              get_master=lambda: S(getSystemState=lambda: (1, '', [[], [], []])))
+    modules = {
+        'rospy': rospy, 'actionlib': S(SimpleActionClient=Mock()),
+        'move_base_msgs.msg': S(MoveBaseAction=object, MoveBaseGoal=object),
+        'sensor_msgs.msg': S(LaserScan=object, PointCloud=object),
+        'nav_msgs.msg': S(OccupancyGrid=object, Path=object),
+        'geometry_msgs.msg': S(Twist=object, PoseWithCovarianceStamped=object, PoseStamped=object),
+    }
+    with patch.dict('sys.modules', modules), patch('scout_navigation.subprocess.Popen'), \
+            patch('scout_navigation.threading.Thread'):
+        yield
+
+
+class MappingAdapterInitializationTests(unittest.TestCase):
+    def test_latched_map_can_arrive_during_subscriber_registration(self):
+        message = grid()
+        message.header = S(frame_id='map')
+
+        def subscribe(topic, message_type, callback, **kwargs):
+            if topic == '/map':
+                callback(message)
+
+        with ros_runtime(subscribe):
+            adapter = Ros1NavigationAdapter(load_config()['navigation'], Mock(), Mock())
+        self.assertIs(adapter.map_snapshot[0], message)
+        self.assertEqual(adapter.map_snapshot[1], adapter.map_id)
+
+    def test_web_start_and_map_replacement_use_initialized_adapter_state(self):
+        with tempfile.TemporaryDirectory() as folder, ros_runtime():
+            telemetry = TelemetryCache(3)
+            ros = Mock()
+            core = BridgeCore(load_config(), ros, telemetry, 'ros1')
+            core.navigation = Mock()
+            # Fresh, measured standstill; no actual robot or ROS launch is involved.
+            telemetry.report = lambda: {'linear_velocity': 0., 'angular_velocity': 0.}
+            telemetry.chassis_connected = lambda: True
+            adapter = Ros1NavigationAdapter(load_config()['navigation'], Mock(), telemetry)
+            manager = WebMapping(core, adapter, 'https://example.com', 'a'*32, folder)
+            manager._launch = Mock()
+            manager._execute({'action': 'START'})
+            self.assertEqual(manager.result, 'SUCCEEDED', manager.message)
+            self.assertEqual(manager.mode, 'MAPPING')
+            manager._launch.assert_called_once_with('cloud_mapping.launch')
+            ros.publish_velocity.assert_called_with(0., 0.)
+
+            message = grid()
+            message.header = S(frame_id='map')
+            message._connection_header = {'callerid': '/web_slam_gmapping'}
+            adapter._map(message)
+            self.assertIs(manager._snapshot()[0], message)
+            self.assertIsNotNone(manager._report()['mapId'])
+            manager._execute({'action': 'SAVE', 'name': 'lab'})
+            self.assertEqual(manager.result, 'SUCCEEDED', manager.message)
+            self.assertTrue((Path(folder)/'lab/map.yaml').is_file())
+
+            manager._execute({'action': 'STOP'})
+            self.assertEqual(manager.result, 'SUCCEEDED', manager.message)
+            self.assertEqual(manager._snapshot(), (None, None))
+            adapter._map(message)  # A late message from the stopped process is ignored.
+            self.assertEqual(manager._snapshot(), (None, None))
 
 
 class MappingTests(unittest.TestCase):

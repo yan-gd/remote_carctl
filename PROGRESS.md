@@ -1,6 +1,6 @@
 # exp3 项目进度与 Agent 交接
 
-更新时间：2026-10-26（Asia/Singapore）。本文记录代码状态、用户提供的现场结果和后续工作边界，供后续 Agent 接续；不是完整测试报告。**最新 Web 建图工作见第19节；第15节的后端续约设计取代第14节前台续约；早期“没有导航”等描述已过时。** 原有部署见 [README 的 Quick Start](README.md#3-quick-start服务器--小车端)，新增能力见 [NAVIGATION-CAMERA.md](docs/NAVIGATION-CAMERA.md)。
+更新时间：2026-10-26（Asia/Singapore）。本文记录代码状态、用户提供的现场结果和后续工作边界，供后续 Agent 接续；不是完整测试报告。**最新 Web 建图工作见第19节，现场 AttributeError 修复见第20节；第15节的后端续约设计取代第14节前台续约；早期“没有导航”等描述已过时。** 原有部署见 [README 的 Quick Start](README.md#3-quick-start服务器--小车端)，新增能力见 [NAVIGATION-CAMERA.md](docs/NAVIGATION-CAMERA.md)。
 
 ## 1. 接手时先知道这些
 
@@ -595,3 +595,10 @@ bash frontend/deploy/smoke-test.sh agilex.yoyoyan.cn
 - 本地验证：后端126项，0失败/0错误、1条件跳过（未设置MQTT_TEST_URL的真实Broker测试）；前端41项通过并可生产构建；桥接97项通过；Python3.7语法解析及启动脚本bash语法通过。后端打包成功。日志在忽略目录 `verification/web-map-*`。
 - 浏览器本地夹具跑通开始建图、保存、加载、初始位姿、选目标及导航提交；1440桌面、390手机布局已检查。修复原有桌面固定高度把地图卡片压缩隐藏的问题。截图明确使用LOCAL UI TEST账号与生成的测试地图，不能当作实车证据。
 - 当前工作基于 `2e14b24`，修改尚未提交、推送或部署。下一步按 `docs/WEB-MAPPING.md` 更新服务器后端/前端与小车、配置独立设备密钥，先验证真实地图和激光对齐，再由现场人员验收短距离到达、避障和STOP/断链停车。首次部署需终端，之后日常建图/选点可全Web；不要宣称无需任何小车端进程。
+
+## 20. 2026-10-26 现场 Web 建图 AttributeError 修复
+
+- 用户部署 `6f1a33d` 后，地图工作台显示 `AttributeError`。代码中 `map_lock`、`map_snapshot`、`map_generation` 错误地初始化在 `NavigationManager`，实际使用者是 `Ros1NavigationAdapter`；开始建图清理旧地图及接收 ROS 地图均会访问缺失属性。
+- 将三个属性移到适配器构造函数、注册订阅之前，兼容 ROS 订阅时立即推送的 latched 地图。新增测试执行真实适配器及 WebMapping 构造/生命周期，仅隔离 ROS 和进程边界；修复前复现缺少 `map_lock` 及网页同款 `AttributeError`，修复后验证开始、接收、保存、停止和旧消息丢弃。
+- 本地桥接99项全部通过，生产文件通过Python3.7语法检查。测试日志 `verification/web-map-attributeerror-tests.log`（忽略目录）。尚未提交、推送或在小车上验证；本次部署只需更新小车代码并重启 `start-scout.sh --web-map`。
+- 用户同时贴出的 Spring `HttpMediaTypeNotAcceptableException` 仅有堆栈尾部，不能据此确定请求来源或根因，也不能视为 Python 属性错误原因；若持续发生需包含异常首行及请求上下文的服务日志。
