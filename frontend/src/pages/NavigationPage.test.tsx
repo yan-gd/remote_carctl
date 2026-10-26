@@ -2,17 +2,72 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
 import { NavigationPage } from './NavigationPage';
 import type { ApiClient } from '../api/client';
-import type { NavigationStatus } from '../api/types';
+import type { MappingState, NavigationStatus } from '../api/types';
+
+vi.mock('../mapping/MapCanvas',()=>({MapCanvas:({onSelect,disabled}:{onSelect:(p:unknown)=>void;disabled:boolean})=>
+  <button disabled={disabled} onClick={()=>onSelect({x:1.2345,y:2.3456,yaw:0.3})}>测试地图选点</button>}));
 
 const ready:NavigationStatus={enabled:true,ready:true,reason:'READY',active:false,missionId:null,ownerId:null,
   robot:{ready:true,reason:'READY',frame:'map',mapId:'map-a',state:'IDLE',missionId:null,pointIndex:0,totalPoints:0,x:0,y:0,yaw:0}};
+const loaded:MappingState={online:true,pending:null,delivery:null,robot:{session:'s',mode:'NAVIGATION',busy:false,mapId:'map-a',maps:['lab'],
+  pose:{x:0,y:0,yaw:0},scan:[],path:[],commandId:null,result:null,message:null}};
 function client() {
   return {navigationStatus:vi.fn(async():Promise<NavigationStatus>=>ready),startNavigation:vi.fn(async()=>({missionId:'mission-a',accepted:true,seq:1})),
-    cancelNavigation:vi.fn(async()=>({})),mappingStatus:vi.fn(async()=>({online:false,robot:null,pending:null,delivery:null}))};
+    cancelNavigation:vi.fn(async()=>({})),mappingStatus:vi.fn(async():Promise<MappingState>=>({online:false,robot:null,pending:null,delivery:null})),
+    mappingGrid:vi.fn(async()=>({session:'s',mapId:'map-a',width:4,height:4,resolution:1,originX:0,originY:0,originYaw:0,cells:'AQEBAQ=='})),
+    mapCommand:vi.fn(async()=>({id:'c'})),control:vi.fn(async()=>({accepted:true}))};
 }
 describe('autonomous navigation page',()=>{
   beforeEach(()=>vi.useFakeTimers());
   afterEach(()=>{cleanup();vi.useRealTimers();});
+  it('guides initial localization then sends the selected map point directly as one goal',async()=>{
+    const api=client();api.mappingStatus.mockResolvedValue(loaded);
+    api.navigationStatus.mockResolvedValue({...ready,ready:false,reason:'INITIAL_POSE_REQUIRED'});
+    render(<NavigationPage api={api as unknown as ApiClient} role="OPERATOR"/>);
+    await act(async()=>{});
+    expect(screen.getByLabelText('地图操作')).toHaveValue('initial');
+    expect(screen.getByText(/先定位小车/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('测试地图选点'));
+    await act(async()=>{fireEvent.click(screen.getByText('确认小车初始位置'));});
+    expect(api.mapCommand).toHaveBeenCalledWith({action:'INITIAL_POSE',mapId:'map-a',pose:{x:1.2345,y:2.3456,yaw:0.3}});
+    expect(api.startNavigation).not.toHaveBeenCalled();
+    // The command receipt alone must not declare navigation ready.
+    expect(screen.getByRole('button',{name:'开始导航'})).toBeDisabled();
+    api.navigationStatus.mockResolvedValue(ready);
+    await act(async()=>{await vi.advanceTimersByTimeAsync(1000);});
+    expect(screen.getByLabelText('地图操作')).toHaveValue('goal');
+    expect(screen.queryByRole('button',{name:'前往此处'})).not.toBeInTheDocument();
+    expect(api.startNavigation).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('测试地图选点'));
+    await act(async()=>{fireEvent.click(screen.getByText('前往此处'));});
+    expect(api.startNavigation).toHaveBeenCalledExactlyOnceWith({mapId:'map-a',cycles:1,points:[{x:1.2345,y:2.3456,yaw:0.3}]});
+    expect(screen.getByRole('button',{name:'前往此处'})).toBeDisabled();
+  });
+  it.each(['map-changed','not-ready','offline','active','server-error'])('rechecks %s at the move click and shows errors beside the map',async condition=>{
+    const api=client();api.mappingStatus.mockResolvedValue(loaded);
+    render(<NavigationPage api={api as unknown as ApiClient} role="OPERATOR"/>);
+    await act(async()=>{});fireEvent.click(screen.getByText('测试地图选点'));
+    if(condition==='map-changed')api.navigationStatus.mockResolvedValue({...ready,robot:{...ready.robot!,mapId:'other'}});
+    if(condition==='not-ready')api.navigationStatus.mockResolvedValue({...ready,ready:false,reason:'LOCALIZATION_UNAVAILABLE'});
+    if(condition==='offline')api.mappingStatus.mockResolvedValue({...loaded,online:false});
+    if(condition==='active')api.navigationStatus.mockResolvedValue({...ready,active:true});
+    if(condition==='server-error')api.startNavigation.mockRejectedValue(new Error('任务提交失败'));
+    await act(async()=>{fireEvent.click(screen.getByText('前往此处'));});
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    if(condition!=='server-error')expect(api.startNavigation).not.toHaveBeenCalled();
+    expect(screen.queryByText('前往目标的任务已提交，等待小车执行反馈。')).not.toBeInTheDocument();
+  });
+  it('shows readiness failure at the map and never starts automatically when it recovers',async()=>{
+    const api=client();api.mappingStatus.mockResolvedValue(loaded);
+    api.navigationStatus.mockResolvedValue({...ready,ready:false,reason:'SENSOR_OR_COSTMAP_STALE'});
+    render(<NavigationPage api={api as unknown as ApiClient} role="OPERATOR"/>);
+    await act(async()=>{});fireEvent.click(screen.getByText('测试地图选点'));
+    expect(screen.getByText(/暂不能出发：雷达/)).toBeInTheDocument();
+    expect(screen.getByText('前往此处')).toBeDisabled();
+    api.navigationStatus.mockResolvedValue(ready);
+    await act(async()=>{await vi.advanceTimersByTimeAsync(1000);});
+    expect(screen.getByText('前往此处')).toBeEnabled();expect(api.startNavigation).not.toHaveBeenCalled();
+  });
   it('leaves the backend-owned mission running when switching to the camera or losing focus',async()=>{
     const api=client();
     api.startNavigation.mockImplementation(async()=>{

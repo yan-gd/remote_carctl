@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ApiClient } from '../api/client';
-import type { NavigationStatus } from '../api/types';
+import type { MapPose, NavigationStatus } from '../api/types';
 import { Card, ErrorNotice, StatusPill, errorMessage } from '../components/UI';
 import { MappingPanel } from '../mapping/MappingPanel';
 
@@ -37,6 +37,7 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
   const [notice,setNotice]=useState<string|null>(null);
   const goalReference=useRef<string|null>(null);
   const alive=useRef(true);
+  const submitting=useRef(false);
   const canMove=role==='OPERATOR';
   const canStop=canMove||role==='MONITOR';
   const mission=!!status?.active || ['ACTIVE','PENDING'].includes(status?.robot?.state??'');
@@ -61,7 +62,7 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
         if(!disposed) {
           setStatus(next);
         }
-      }catch(e){if(!disposed)setError(errorMessage(e));}
+      }catch(e){if(!disposed){setError(errorMessage(e));setStatus(old=>old?{...old,ready:false,reason:'NO_LIVE_NAVIGATION_REPORT'}:null);}}
       finally{inFlight=false;}
     };
     void refresh();
@@ -70,6 +71,8 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
   },[api]);
 
   async function start(){
+    if(submitting.current)return;
+    submitting.current=true;
     setError(null);setBusy(true);
     try{
       const parsed=points.map(p=>({x:Number(p.x),y:Number(p.y),yaw:Number(p.yaw)}));
@@ -84,7 +87,34 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
       setNotice(direct?'纯里程计目标已发给小车；无自动避障，必须在清空障碍的场地由现场人员监护。':relative?'相对目标已发给Broker，等待小车确认；开始时的位置和朝向会被固定，可切换摄像头查看。':'目标点已发给Broker，等待真实move_base反馈；可切换摄像头查看，巡逻由后端持续续约。');
       const next=await api.navigationStatus();
       if(alive.current)setStatus(next);
-    }catch(e){if(alive.current)setError(errorMessage(e));}finally{if(alive.current)setBusy(false);}
+    }catch(e){if(alive.current)setError(errorMessage(e));}finally{submitting.current=false;if(alive.current)setBusy(false);}
+  }
+
+  async function goTo(pose:MapPose,mapId:string){
+    if(submitting.current)throw new Error('正在提交导航，请稍候。');
+    submitting.current=true;setBusy(true);setError(null);setNotice(null);
+    try{
+      // Recheck both live sources at the explicit move click, not just the displayed snapshot.
+      const [next,map]=await Promise.all([api.navigationStatus(),api.mappingStatus()]);
+      if(!alive.current)throw new Error('页面已离开，请重新选择目标。');
+      setStatus(next);
+      if(!canMove)throw new Error('当前账号没有导航权限。');
+      if(!map.online||map.robot?.mode!=='NAVIGATION'||map.robot.busy||map.pending)
+        throw new Error('地图服务未就绪或正在切换，请稍后重新选择。');
+      if(map.robot.mapId!==mapId||next.robot?.mapId!==mapId||next.robot?.mode==='relative')
+        throw new Error('地图已经变化，请重新选择目标。');
+      if(next.active||['ACTIVE','PENDING'].includes(next.robot.state))throw new Error('已有导航任务正在执行，请先停止。');
+      if(!next.ready)throw new Error(REASONS[next.reason??'']??next.reason??'导航尚未就绪。');
+      if(!Object.values(pose).every(Number.isFinite)||Math.abs(pose.yaw)>Math.PI)throw new Error('请选择有效的目标位置与朝向。');
+      const accepted=await api.startNavigation({mapId,points:[pose],cycles:1});
+      if(!accepted.accepted)throw new Error('导航任务未被接收，请检查小车状态后重试。');
+      if(!alive.current)return;
+      goalReference.current=mapId;
+      setPoints([{x:String(pose.x),y:String(pose.y),yaw:String(pose.yaw)}]);setCycles('1');
+      setNotice('已提交前往选中位置的单点导航，等待小车执行反馈。');
+      // Keep the move buttons closed while the device acknowledges the accepted mission.
+      setStatus({...next,active:true});
+    }finally{submitting.current=false;if(alive.current)setBusy(false);}
   }
 
   async function cancel(){
@@ -102,7 +132,8 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
   return <div className={`stack navigation-page${relative?' is-relative':''}`}>
     {error&&<ErrorNotice message={error}/>}
     {notice&&<div className="notice notice-info">{notice}</div>}
-    {!relative&&<MappingPanel api={api} role={role} mission={mission} onReference={id=>{
+    {!relative&&<MappingPanel api={api} role={role} mission={mission} navigation={status} navigationReason={reason}
+      navigationBusy={busy} onNavigate={goTo} onReference={id=>{
       if(goalReference.current&&goalReference.current!==id){goalReference.current=null;setPoints([{x:'',y:'',yaw:'0'}]);}
     }} onGoal={(pose,id)=>{
       if(id!==status?.robot?.mapId){setError('地图状态正在同步，请稍后重新选择。');return;}
@@ -110,7 +141,7 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
       const point={x:pose.x.toFixed(3),y:pose.y.toFixed(3),yaw:String(pose.yaw)};
       setPoints(old=>old.length===1&&!old[0].x&&!old[0].y?[point]:old.length<30?[...old,point]:old);
     }}/>}
-    <Card title={direct?'附近目标 · 纯里程计（无避障）':relative?'附近目标 · 实时避障':'目标点导航 / 多点巡逻'} actions={<StatusPill tone={status?.ready?'ok':'warn'}>{mission?(relative?'正在前往目标':'自主巡逻中'):status?.ready?'导航就绪':'尚未就绪'}</StatusPill>}>
+    <Card title={direct?'附近目标 · 纯里程计（无避障）':relative?'附近目标 · 实时避障':'目标点导航 / 多点巡逻'} actions={<StatusPill tone={status?.ready?'ok':'warn'}>{mission?'导航任务执行中':status?.ready?'导航就绪':'尚未就绪'}</StatusPill>}>
       <p className="muted">{reason}</p>
       {direct&&<p className="notice notice-error">此模式没有自动避障能力：可能撞到人或障碍物。仅在清空行驶路径、现场有人监护且能立即急停时使用。</p>}
       <p className="fine-print">{direct?'以收到目标时的里程计位姿为起点，前方为X正方向、左侧为Y正方向。小车先转向再前进，目标距离0.1至3米，无雷达安全检查。':relative?'以小车接受目标时的位置和朝向为起点，前方为X正方向、左侧为Y正方向。仅单点，直线距离0.1至3米；无需预存地图，使用实时激光障碍数据。':'仅使用已有地图的 map 坐标。小车自主规划与避障。'}切页或关闭浏览器后继续；需结束请主动停止。后端/MQTT失联时3秒租约到期停车。</p>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ApiClient } from '../api/client';
-import type { MapGrid, MappingState, MapPose, MapRequest } from '../api/types';
+import type { MapGrid, MappingState, MapPose, MapRequest, NavigationStatus } from '../api/types';
 import { Card, ErrorNotice, StatusPill, errorMessage } from '../components/UI';
 import { useHoldControl } from '../control/useHoldControl';
 import { MapCanvas } from './MapCanvas';
@@ -16,16 +16,18 @@ const MESSAGES:Record<string,string>={
   FileExistsError:'同名地图已存在，请换一个新名字保存。',ROS_PROCESS_EXITED:'建图或导航进程已退出，请检查小车端日志。',
   MAP_CHANGED:'地图已变化，请重新选点。',ROS_LAUNCH_FAILED:'ROS 建图或导航未能启动，请检查小车端日志。',
   MAP_LOAD_TIMEOUT:'加载后未收到地图，请检查小车端 map_server 日志。',
+  INITIAL_POSE_SUBSCRIBER_UNAVAILABLE:'定位节点尚未连接，请等待 AMCL 启动后重试确认位置。',
 };
 
-export function MappingPanel({api,role,mission,onGoal,onReference}:{api:ApiClient;role:string;mission:boolean;
-  onGoal:(pose:MapPose,mapId:string)=>void;onReference:(mapId:string|null)=>void}) {
+export function MappingPanel({api,role,mission,onGoal,onNavigate,onReference,navigation,navigationReason,navigationBusy}:{api:ApiClient;role:string;mission:boolean;
+  onGoal:(pose:MapPose,mapId:string)=>void;onNavigate:(pose:MapPose,mapId:string)=>Promise<void>;
+  onReference:(mapId:string|null)=>void;navigation:NavigationStatus|null;navigationReason:string;navigationBusy:boolean}) {
   const [state,setState]=useState<MappingState|null>(null);
   const [grid,setGrid]=useState<MapGrid|null>(null);
   const [error,setError]=useState<string|null>(null);
   const [linkError,setLinkError]=useState<string|null>(null);
   const [name,setName]=useState('');const [saved,setSaved]=useState('');
-  const [pick,setPick]=useState<'goal'|'initial'>('goal');
+  const [pick,setPick]=useState<'goal'|'initial'|'patrol'>('goal');
   const [selection,setSelection]=useState<{pose:MapPose;mapId:string}|null>(null);
   const [sending,setSending]=useState(false);
   const [notice,setNotice]=useState<string|null>(null);
@@ -33,10 +35,19 @@ export function MappingPanel({api,role,mission,onGoal,onReference}:{api:ApiClien
   const alive=useRef(true),reference=useRef(onReference);reference.current=onReference;
   const canMove=role==='OPERATOR',canStop=canMove||role==='MONITOR';
   const live=!!state?.online,robot=state?.robot;
-  const busy=sending||!!robot?.busy||!!state?.pending;
+  const busy=sending||navigationBusy||!!robot?.busy||!!state?.pending;
   const controller=useHoldControl(api,e=>{setPressed(null);setError(errorMessage(e));});
   const mapping=live&&robot?.mode==='MAPPING';
   const canPick=canMove&&live&&!busy&&!mission&&robot?.mode==='NAVIGATION'&&grid?.mapId===robot.mapId;
+  const sameMap=!!robot?.mapId&&navigation?.robot?.mapId===robot.mapId;
+  const ready=sameMap&&!!navigation?.ready;
+  const needsInitial=sameMap&&navigation?.reason==='INITIAL_POSE_REQUIRED';
+  const waitingForLocalization=useRef(false);
+
+  useEffect(()=>{
+    if(needsInitial){setPick('initial');waitingForLocalization.current=true;}
+    else if(ready&&waitingForLocalization.current){setPick('goal');waitingForLocalization.current=false;setNotice(null);}
+  },[needsInitial,ready,robot?.session,robot?.mapId]);
 
   useEffect(()=>{
     alive.current=true;let disposed=false,inFlight=false,known:string|null=null,lastGood=0;
@@ -68,7 +79,7 @@ export function MappingPanel({api,role,mission,onGoal,onReference}:{api:ApiClien
     },1000);
     return()=>{disposed=true;alive.current=false;window.clearInterval(timer);};
   },[api]);
-  useEffect(()=>{setSelection(null);},[robot?.mapId,robot?.session,pick]);
+  useEffect(()=>{setSelection(null);setNotice(null);},[robot?.mapId,robot?.session,pick,live]);
   useEffect(()=>{
     const stop=()=>{setPressed(null);void controller.stop();};
     const hidden=()=>{if(document.hidden)stop();};
@@ -83,15 +94,25 @@ export function MappingPanel({api,role,mission,onGoal,onReference}:{api:ApiClien
       await controller.stop();
       await api.mapCommand(request);
       if(!alive.current)return;
-      setNotice('操作已提交，等待小车回执。');
+      if(request.action==='INITIAL_POSE')waitingForLocalization.current=true;
+      setNotice(request.action==='INITIAL_POSE'?'位置确认已提交，等待小车定位与导航检查通过；就绪后会切换为“前往地图目标”。':'操作已提交，等待小车回执。');
       setState(await api.mappingStatus());
+    }catch(e){if(alive.current)setError(errorMessage(e));}
+    finally{if(alive.current)setSending(false);}
+  }
+  async function navigate(){
+    if(!selection||!canPick||!ready)return;
+    setSending(true);setError(null);setNotice(null);
+    try{
+      await onNavigate(selection.pose,selection.mapId);
+      if(alive.current)setNotice('前往目标的任务已提交，等待小车执行反馈。');
     }catch(e){if(alive.current)setError(errorMessage(e));}
     finally{if(alive.current)setSending(false);}
   }
   function end(){setPressed(null);void controller.stop();}
   const feedback=robot?.message&&(MESSAGES[robot.message]??robot.message);
   return <Card title="地图工作台" className="mapping-panel" actions={<StatusPill tone={live?'ok':'warn'}>{live?MODES[robot!.mode]:'建图服务未连接'}</StatusPill>}>
-    <p className="muted">① 开始建图并遥控采集 → ② 保存并加载地图 → ③ 设置小车位置 → ④ 在地图上选目标并开始导航</p>
+    <p className="muted">① 建图并保存 → ② 加载地图 → ③ 确认小车当前位置与朝向 → ④ 选目标，点击“前往此处”</p>
     {error&&<ErrorNotice message={error}/>}
     {linkError&&<ErrorNotice message={linkError}/>}
     {feedback&&<p className={`notice ${robot?.result==='FAILED'?'notice-error':'notice-info'}`}>{feedback}</p>}
@@ -119,22 +140,30 @@ export function MappingPanel({api,role,mission,onGoal,onReference}:{api:ApiClien
       <button className="button danger" disabled={!canStop} onClick={()=>{setPressed(null);void controller.stop(true);}}>立即停车</button>
     </div>}
     {grid&&live?<>
+      {robot?.mode==='NAVIGATION'&&<div className="notice notice-info" role="status">
+        {mission?'正在执行导航，可使用“取消导航并停止”结束任务。':needsInitial?
+          '先定位小车：请在地图上点击小车当前实际所在的位置，朝车头方向拖动，再点击“确认小车初始位置”。这一步完成后才能选择目的地。':
+          ready?'导航已就绪：核对橙色激光与地图轮廓对齐后，选择目的地并点击“前往此处”。':
+          `暂不能出发：${sameMap?navigationReason:'地图与导航状态正在同步，请稍候。'}`}
+        {!needsInitial&&!ready&&!mission&&<button className="button" disabled={!canMove||busy} onClick={()=>setPick('initial')}>重新设置小车位置</button>}
+      </div>}
       <div className="mapping-controls">
-        <label>地图操作<select aria-label="地图操作" value={pick} onChange={e=>setPick(e.target.value as 'goal'|'initial')} disabled={!canMove||busy||mission}>
-          <option value="goal">选择导航目标</option><option value="initial">设置小车初始位置</option>
+        <label>地图操作<select aria-label="地图操作" value={pick} onChange={e=>setPick(e.target.value as 'goal'|'initial'|'patrol')} disabled={!canMove||busy||mission}>
+          <option value="goal">前往地图目标</option><option value="initial">设置小车初始位置</option><option value="patrol">编辑多点巡逻</option>
         </select></label>
         <span>{mapping?'地图正在更新，建图完成并加载后可选点。':pick==='initial'?'在小车实际位置按下，再沿车头方向拖动。':'在目标位置按下，拖动指定到达时的朝向。'}</span>
       </div>
       <MapCanvas grid={grid} pose={robot?.pose??null} scan={robot?.scan??[]} path={robot?.path??[]} selected={selection?.mapId===grid.mapId?selection.pose:null}
         disabled={!canPick} onError={setError} onSelect={pose=>{setError(null);setSelection({pose,mapId:grid.mapId});}}/>
       {selection&&<div className="mapping-controls">
-        <span>选中位置：X {selection.pose.x.toFixed(2)} m，Y {selection.pose.y.toFixed(2)} m</span>
+        <span>{pick==='initial'?'小车初始位置':'目的地'}：X {selection.pose.x.toFixed(2)} m，Y {selection.pose.y.toFixed(2)} m</span>
         <label>朝向（弧度）<input type="number" step="0.1" min={-Math.PI} max={Math.PI} aria-label="地图选点朝向" value={Math.max(-Math.PI,Math.min(Math.PI,Number(selection.pose.yaw.toFixed(3))))}
           onChange={e=>{const yaw=Number(e.target.value);if(Number.isFinite(yaw)&&Math.abs(yaw)<=Math.PI)setSelection({...selection,pose:{...selection.pose,yaw}});}}/></label>
-        <button className="button primary" disabled={!canPick||selection.mapId!==robot?.mapId} onClick={()=>{
+        <button className="button primary" disabled={!canPick||selection.mapId!==robot?.mapId||(pick==='goal'&&!ready)} onClick={()=>{
           if(pick==='initial')void command({action:'INITIAL_POSE',mapId:selection.mapId,pose:selection.pose});
-          else {onGoal(selection.pose,selection.mapId);setNotice('目标已加入下方点位列表，点击“开始导航”后小车才会移动。');}
-        }}>{pick==='initial'?'确认小车初始位置':'加入导航目标'}</button>
+          else if(pick==='goal')void navigate();
+          else {onGoal(selection.pose,selection.mapId);setNotice('巡逻点已加入下方列表，编辑完成后点击“开始导航”。');}
+        }}>{pick==='initial'?'确认小车初始位置':pick==='goal'?'前往此处':'加入巡逻点'}</button>
       </div>}
     </>:<div className="map-empty">{mapping?'等待第一张实时地图，请确认雷达和里程计正常。':'开始建图或加载已保存地图后，这里将显示真实地图。'}</div>}
     {robot?.mode==='NAVIGATION'&&<p className="fine-print">蓝色箭头是小车位置，橙色点是实时激光，绿色线是近期规划路径。设置初始位置后，请先核对激光轮廓与地图对齐。</p>}
