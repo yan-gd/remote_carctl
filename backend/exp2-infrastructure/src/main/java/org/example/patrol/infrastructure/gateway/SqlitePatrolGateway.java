@@ -8,6 +8,8 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Repository
 public class SqlitePatrolGateway
@@ -36,11 +38,28 @@ public class SqlitePatrolGateway
     }
 
     public User userById(long id) {
-        return model(mapper.userById(id));
+        var user = model(mapper.userById(id));
+        return user != null && user.active() ? user : null;
     }
 
     public User userByName(String name) {
-        return model(mapper.userByName(name));
+        var user = model(mapper.userByName(name));
+        return user != null && user.active() ? user : null;
+    }
+
+    public User userByNameIncludingDisabled(String name) { return model(mapper.userByName(name)); }
+
+    public User userIncludingDisabled(long id) { return model(mapper.userById(id)); }
+
+    public List<User> allUsers() { return mapper.allUsers().stream().map(this::model).toList(); }
+
+    public void setAccess(long id, Set<Permission> permissions, boolean admin, boolean disabled) {
+        String value = permissions.stream().map(Enum::name).sorted().collect(Collectors.joining(","));
+        mapper.setAccess(id, value, admin ? 1 : 0, disabled ? 1 : 0);
+    }
+
+    public void updateCredentials(long id, String passwordHash, Role role) {
+        check(mapper.updateCredentials(id, passwordHash, role.name()));
     }
 
     public User insertUser(User u) {
@@ -131,7 +150,7 @@ public class SqlitePatrolGateway
     }
 
     public Page<Alarm> alarms(
-            int p, int s, AlarmLevel level, AlarmStatus status, Instant from, Instant to) {
+            int p, int s, AlarmLevel level, AlarmStatus status, Instant from, Instant to, String keyword) {
         Rules.range(from, to);
         return new Page<>(
                 mapper
@@ -141,11 +160,11 @@ public class SqlitePatrolGateway
                                 name(level),
                                 name(status),
                                 millis(from),
-                                millis(to))
+                                millis(to), keyword)
                         .stream()
                         .map(this::model)
                         .toList(),
-                mapper.alarmCount(name(level), name(status), millis(from), millis(to)),
+                mapper.alarmCount(name(level), name(status), millis(from), millis(to), keyword),
                 p,
                 s);
     }
@@ -164,13 +183,13 @@ public class SqlitePatrolGateway
         mapper.appendLog(data(l));
     }
 
-    public Page<ControlLog> logs(int p, int s, String op, Instant from, Instant to, Long actorId) {
+    public Page<ControlLog> logs(int p, int s, String op, Instant from, Instant to, Long actorId, String keyword) {
         Rules.range(from, to);
         return new Page<>(
-                mapper.logs(actorId, s, offset(p, s), op, millis(from), millis(to)).stream()
+                mapper.logs(actorId, s, offset(p, s), op, millis(from), millis(to), keyword).stream()
                         .map(this::model)
                         .toList(),
-                mapper.logCount(actorId, op, millis(from), millis(to)),
+                mapper.logCount(actorId, op, millis(from), millis(to), keyword),
                 p,
                 s);
     }
@@ -181,12 +200,22 @@ public class SqlitePatrolGateway
 
     private User model(UserDO d) {
         if (d == null) return null;
+        Role role = Role.valueOf(d.getRole());
+        UserAccessDO access = mapper.userAccess(d.getId());
+        Set<Permission> permissions = Permission.defaults(role);
+        if (access != null) {
+            permissions = EnumSet.noneOf(Permission.class);
+            if (!access.getPermissions().isBlank())
+                for (String value : access.getPermissions().split(",")) permissions.add(Permission.valueOf(value));
+        }
         return new User(
                 d.getId(),
                 d.getUsername(),
                 d.getPasswordHash(),
-                Role.valueOf(d.getRole()),
-                instant(d.getCreatedAt()));
+                role,
+                instant(d.getCreatedAt()),
+                access != null && access.isAdmin(), permissions,
+                access == null || !access.isDisabled());
     }
 
     private UserDO data(User m) {

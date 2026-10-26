@@ -27,7 +27,7 @@ public class AlarmCommandExecutor {
     @Transactional
     public AlarmView acknowledge(long id, long actor) {
         var u = users.userById(actor);
-        RolePolicy.require(u, Role.MONITOR);
+        RolePolicy.require(u, Permission.ALARM_ACK);
         var a = Views.required(alarms.alarm(id), "告警").acknowledge(actor, clock.instant());
         alarms.acknowledge(a);
         audit.success(u, "ALARM_ACK", "alarm:" + id);

@@ -21,7 +21,7 @@ const OPERATIONS = [
   { value: 'ALARM_ACK', label: '确认告警' },
 ];
 
-export function LogsPage({ api, role }: { api: ApiClient; role: string }) {
+export function LogsPage({ api, role, grants }: { api: ApiClient; role: string; grants?: string[] }) {
   const [items, setItems] = useState<ControlLogItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -30,6 +30,7 @@ export function LogsPage({ api, role }: { api: ApiClient; role: string }) {
   const [error, setError] = useState<string | null>(null);
   const requestId = useRef(0);
   const [from,setFrom]=useState(''),[to,setTo]=useState('');
+  const [query,setQuery]=useState(''),[keyword,setKeyword]=useState('');
 
   const load = useCallback(async () => {
     const id = ++requestId.current;
@@ -37,7 +38,7 @@ export function LogsPage({ api, role }: { api: ApiClient; role: string }) {
     setError(null);
     try {
       if(from&&to&&from>to)throw new Error('开始时间不能晚于结束时间。');
-      const result = await api.controlLogs({ page, size: 20, operation,
+      const result = await api.controlLogs({ page, size: 20, operation,q:keyword,
         from:from?new Date(from).toISOString():undefined,to:to?new Date(to).toISOString():undefined });
       if (id !== requestId.current) return;
       setItems(result.items);
@@ -47,7 +48,7 @@ export function LogsPage({ api, role }: { api: ApiClient; role: string }) {
     } finally {
       if (id === requestId.current) setLoading(false);
     }
-  }, [api, operation, page, from, to]);
+  }, [api, operation, page, from, to, keyword]);
 
   useEffect(() => {
     void load();
@@ -78,10 +79,14 @@ export function LogsPage({ api, role }: { api: ApiClient; role: string }) {
         </>
       }
     >
-      <p className="muted">{permissions(role).allLogs?'可查询全部用户的操作日志。':'仅显示本人的操作日志。'}</p>
-      <div className="mapping-controls history-filters">
-        <label>开始时间<input type="datetime-local" value={from} onChange={e=>{setFrom(e.target.value);setPage(1);}}/></label>
-        <label>结束时间<input type="datetime-local" value={to} onChange={e=>{setTo(e.target.value);setPage(1);}}/></label>
+      <div className="data-toolbar">
+        <form className="search-form" onSubmit={e=>{e.preventDefault();setPage(1);setKeyword(query.trim());}}>
+          <input aria-label="搜索日志" placeholder="搜索用户、操作或目标" maxLength={80} value={query} onChange={e=>setQuery(e.target.value)}/>
+          <button type="submit" className="button small">搜索</button>
+        </form>
+        <label>从<input aria-label="开始时间" type="datetime-local" value={from} onChange={e=>{setFrom(e.target.value);setPage(1);}}/></label>
+        <label>至<input aria-label="结束时间" type="datetime-local" value={to} onChange={e=>{setTo(e.target.value);setPage(1);}}/></label>
+        <span className="fine-print">{permissions(role,grants).allLogs?'全部用户':'仅本人'} · {total} 条</span>
       </div>
       {error && <ErrorNotice message={error} onRetry={() => void load()} />}
       {loading && items.length === 0 ? (
@@ -90,7 +95,7 @@ export function LogsPage({ api, role }: { api: ApiClient; role: string }) {
         <Empty>没有符合条件的日志。</Empty>
       ) : (
         <div className="table-wrap">
-          <table>
+          <table className="data-table">
             <thead>
               <tr>
                 <th>时间</th>

@@ -36,12 +36,13 @@ public class AlarmController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String level,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String q,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
                     Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
                     Instant to) {
         return ApiResponse.success(
-                service.alarms(new Query(page, size, status, level, null, from, to)));
+                service.alarms(new Query(page, size, status, level, null, from, to, q)));
     }
 
     @GetMapping("/{id}")

@@ -11,5 +11,6 @@ public interface LogGateway {
             String operation,
             java.time.Instant from,
             java.time.Instant to,
-            Long actorId);
+            Long actorId,
+            String keyword);
 }

@@ -13,6 +13,22 @@ public interface PatrolMapper {
     @Select("SELECT * FROM sys_user WHERE username=#{name} COLLATE NOCASE")
     UserDO userByName(String name);
 
+    @Select("SELECT * FROM sys_user ORDER BY id")
+    List<UserDO> allUsers();
+
+    @Select("SELECT user_id,permissions,is_admin AS admin,disabled FROM sys_user_access WHERE user_id=#{id}")
+    UserAccessDO userAccess(long id);
+
+    @Insert("INSERT INTO sys_user_access(user_id,permissions,is_admin,disabled)"
+            + " VALUES(#{id},#{permissions},#{admin},#{disabled})"
+            + " ON CONFLICT(user_id) DO UPDATE SET permissions=excluded.permissions,"
+            + " is_admin=excluded.is_admin,disabled=excluded.disabled")
+    int setAccess(@Param("id") long id, @Param("permissions") String permissions,
+                  @Param("admin") int admin, @Param("disabled") int disabled);
+
+    @Update("UPDATE sys_user SET role=#{role}, password_hash=COALESCE(#{hash},password_hash) WHERE id=#{id}")
+    int updateCredentials(@Param("id") long id, @Param("hash") String hash, @Param("role") String role);
+
     @Insert(
             "INSERT INTO sys_user(username,password_hash,role,created_at)"
                 + " VALUES(#{username},#{passwordHash},#{role},#{createdAt})")
@@ -96,7 +112,8 @@ public interface PatrolMapper {
     String ALARM_WHERE =
             " WHERE (#{level} IS NULL OR level=#{level}) AND (#{status} IS NULL OR"
                 + " status=#{status}) AND (#{from} IS NULL OR occurred_at>=#{from}) AND (#{to} IS"
-                + " NULL OR occurred_at<=#{to})";
+                + " NULL OR occurred_at<=#{to}) AND (#{keyword} IS NULL OR"
+                + " instr(lower(title || ' ' || coalesce(description,'') || ' ' || source),lower(#{keyword}))>0)";
 
     @Select(
             "SELECT * FROM alarm_record"
@@ -108,14 +125,16 @@ public interface PatrolMapper {
             @Param("level") String level,
             @Param("status") String status,
             @Param("from") Long from,
-            @Param("to") Long to);
+            @Param("to") Long to,
+            @Param("keyword") String keyword);
 
     @Select("SELECT count(*) FROM alarm_record" + ALARM_WHERE)
     long alarmCount(
             @Param("level") String level,
             @Param("status") String status,
             @Param("from") Long from,
-            @Param("to") Long to);
+            @Param("to") Long to,
+            @Param("keyword") String keyword);
 
     @Insert(
             "INSERT INTO alarm_record(title,description,level,status,source,seed_key,occurred_at)"
@@ -137,7 +156,8 @@ public interface PatrolMapper {
     String LOG_WHERE =
             " WHERE (#{actorId} IS NULL OR actor_id=#{actorId}) AND (#{operation} IS NULL OR"
                 + " operation=#{operation}) AND (#{from} IS NULL OR occurred_at>=#{from}) AND"
-                + " (#{to} IS NULL OR occurred_at<=#{to})";
+                + " (#{to} IS NULL OR occurred_at<=#{to}) AND (#{keyword} IS NULL OR"
+                + " instr(lower(actor_name || ' ' || operation || ' ' || target || ' ' || coalesce(error,'')),lower(#{keyword}))>0)";
 
     @Select(
             "SELECT * FROM control_log"
@@ -149,12 +169,14 @@ public interface PatrolMapper {
             @Param("offset") long offset,
             @Param("operation") String operation,
             @Param("from") Long from,
-            @Param("to") Long to);
+            @Param("to") Long to,
+            @Param("keyword") String keyword);
 
     @Select("SELECT count(*) FROM control_log" + LOG_WHERE)
     long logCount(
             @Param("actorId") Long actorId,
             @Param("operation") String operation,
             @Param("from") Long from,
-            @Param("to") Long to);
+            @Param("to") Long to,
+            @Param("keyword") String keyword);
 }

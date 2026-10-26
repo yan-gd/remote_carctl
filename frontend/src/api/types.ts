@@ -20,7 +20,12 @@ export interface UserView {
   username: string;
   role: Role;
   createdAt?: string | null;
+  permissions?: string[];
+  active?: boolean;
 }
+
+export type UserInput = { username: string; password: string; role: string; permissions: string[] };
+export type UserChange = { role: string; password?: string; permissions: string[] };
 
 export interface LoginResult {
   token: string;

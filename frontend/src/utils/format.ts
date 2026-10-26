@@ -47,6 +47,7 @@ export function motionLabel(state: string): string {
 }
 
 export function roleLabel(role: string): string {
+  if (role === 'ADMIN') return '系统管理员';
   const labels: Record<string, string> = {
     OPERATOR: '远程巡检操作员',
     MONITOR: '安全监控值班员',

@@ -57,6 +57,7 @@ public class PatrolQueryExecutor {
 
     public PageView<AlarmView> alarms(Query q) {
         Views.query(q);
+        keyword(q.keyword());
         return Views.page(
                 alarms.alarms(
                         q.page(),
@@ -64,17 +65,22 @@ public class PatrolQueryExecutor {
                         Views.parse(AlarmLevel.class, q.level()),
                         Views.parse(AlarmStatus.class, q.status()),
                         q.from(),
-                        q.to()),
+                        q.to(), q.keyword()),
                 Views::alarm);
     }
 
     public PageView<LogView> logs(Query q, long actor) {
         Views.query(q);
+        keyword(q.keyword());
         var user = Views.required(users.userById(actor), "用户");
-        Long scope = (user.role() == Role.OPERATOR || user.role() == Role.MONITOR) ? actor : null;
+        Long scope = user.can(Permission.ALL_LOGS) ? null : actor;
         if (q.operation() != null && !q.operation().matches("[A-Z_]{1,40}"))
             throw BusinessException.invalid("操作类型须为1-40位大写字母或下划线");
         return Views.page(
-                logs.logs(q.page(), q.size(), q.operation(), q.from(), q.to(), scope), Views::log);
+                logs.logs(q.page(), q.size(), q.operation(), q.from(), q.to(), scope, q.keyword()), Views::log);
+    }
+
+    private static void keyword(String value) {
+        if (value != null && value.length() > 80) throw BusinessException.invalid("搜索词最多80个字符");
     }
 }

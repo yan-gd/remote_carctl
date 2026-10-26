@@ -2,10 +2,10 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { errorMessage } from './UI';
 import { useRobot } from '../robot/RobotContext';
 import { formatRelative, roleLabel } from '../utils/format';
-import { permissions, roleDescription } from '../auth/permissions';
+import { permissions } from '../auth/permissions';
 import type { ApiClient } from '../api/client';
 
-export type Tab = 'dashboard' | 'control' | 'alarms' | 'logs' | 'camera' | 'navigation';
+export type Tab = 'dashboard' | 'control' | 'alarms' | 'logs' | 'camera' | 'navigation' | 'users';
 
 const NAV: Array<{ id: Tab; label: string; description: string }> = [
   {
@@ -30,6 +30,7 @@ const NAV: Array<{ id: Tab; label: string; description: string }> = [
     label: '日志',
     description: '登录、控制与巡检数据变更的操作记录。',
   },
+  {id:'users',label:'用户管理',description:'账号及权限管理'},
 ];
 
 function clockText(value: Date | null): string {
@@ -45,6 +46,7 @@ function clockText(value: Date | null): string {
 export function Shell({
   username,
   role,
+  grants,
   active,
   onNavigate,
   onLogout,
@@ -54,6 +56,7 @@ export function Shell({
 }: {
   username: string;
   role: string;
+  grants?: string[];
   active: Tab;
   onNavigate: (tab: Tab) => void;
   onLogout: () => Promise<void>;
@@ -67,7 +70,7 @@ export function Shell({
   const [stopNotice, setStopNotice] = useState<{failed:boolean;message:string}|null>(null);
   const online = status?.online ?? info?.online ?? false;
   const current = NAV.find((item) => item.id === active) ?? NAV[0];
-  const access = permissions(role);
+  const access = permissions(role,grants);
   const [unread, setUnread] = useState<number|null>(null);
   const [alarmError,setAlarmError] = useState(false);
 
@@ -97,7 +100,7 @@ export function Shell({
     setStopNotice(null);
     try {
       await onStop();
-      setStopNotice({failed:false,message:'STOP已发送，请核对回执和实际停车状态。'});
+      setStopNotice({failed:false,message:'STOP已发送，请确认实际停车。'});
     } catch (caught) { setStopNotice({failed:true,message:errorMessage(caught)}); }
     finally { setStopping(false); }
   }
@@ -117,11 +120,11 @@ export function Shell({
       <aside className="sidebar">
         <div className="brand">
           <strong>SCOUT</strong>
-          <span>远程巡检控制台</span>
+          <span>机器人控制台</span>
         </div>
 
         <nav className="nav" aria-label="主导航">
-          {NAV.filter(item=>item.id!=='control'||access.move).map((item) => (
+          {NAV.filter(item=>(item.id!=='control'||access.move)&&(item.id!=='users'||access.manageUsers)).map((item) => (
             <button
               key={item.id}
               type="button"
@@ -152,7 +155,6 @@ export function Shell({
             <div className="user-meta">
               <strong>{username}</strong>
               <span>{roleLabel(role)}</span>
-              <span className="fine-print">{roleDescription(role)}</span>
             </div>
             <button
               type="button"
@@ -170,7 +172,6 @@ export function Shell({
         <header className="topbar">
           <div className="topbar-heading">
             <h1>{current.label}</h1>
-            <p>{current.description}</p>
           </div>
           <div className="topbar-meta">
             {access.stop && <button type="button"

@@ -9,7 +9,9 @@ public final class Views {
     private Views() {}
 
     public static UserView user(User u) {
-        return new UserView(u.id(), u.username(), u.role().name(), u.createdAt());
+        return new UserView(u.id(), u.username(), u.admin() ? "ADMIN" : u.role().name(), u.createdAt(),
+                (u.admin() ? java.util.Arrays.stream(Permission.values()) : u.permissions().stream())
+                        .map(Enum::name).sorted().toList(), u.active());
     }
 
     public static RouteView route(PatrolRoute r) {

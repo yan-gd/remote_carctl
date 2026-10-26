@@ -5,6 +5,7 @@ import { useRobot } from '../robot/RobotContext';
 import { formatNumber, motionLabel } from '../utils/format';
 import { Card, ErrorNotice, StatusPill, errorMessage } from '../components/UI';
 import { ControlCamera } from '../components/ControlCamera';
+import { permissions } from '../auth/permissions';
 
 const DIRECTIONS: Array<{ command: string; label: string; symbol: string }> = [
   { command: 'FORWARD', label: '前进', symbol: '↑' },
@@ -14,7 +15,7 @@ const DIRECTIONS: Array<{ command: string; label: string; symbol: string }> = [
   { command: 'BACKWARD', label: '后退', symbol: '↓' },
 ];
 
-export function ControlPage({ api, role }: { api: ApiClient; role: string }) {
+export function ControlPage({ api, role, grants }: { api: ApiClient; role: string; grants?: string[] }) {
   const { status, error: statusError } = useRobot();
   const [controlError, setControlError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -23,8 +24,7 @@ export function ControlPage({ api, role }: { api: ApiClient; role: string }) {
     setPressed(null);
     setControlError(errorMessage(caught));
   });
-  const canMove = role === 'OPERATOR';
-  const canStop = role === 'OPERATOR' || role === 'MONITOR';
+  const {move:canMove,stop:canStop} = permissions(role,grants);
 
   useEffect(() => {
     const stop = () => {

@@ -41,7 +41,7 @@ public class NavigationService {
 
     public synchronized Accepted start(NavigationModels.Start request, long actor) {
         var user = users.userById(actor);
-        RolePolicy.require(user, Role.OPERATOR);
+        RolePolicy.require(user, Permission.NAVIGATE);
         if (!enabled) throw BusinessException.unavailable("NAVIGATION_DISABLED", "请先完成地图、定位、避障检查再启用导航");
         if (!gateway.connected()) throw BusinessException.unavailable("MQTT_UNAVAILABLE", "MQTT不可用");
         var state = status();
@@ -88,7 +88,7 @@ public class NavigationService {
                 || !Set.of("ACTIVE", "PENDING").contains(report.state())) return;
         try {
             var actor = users.userById(owner);
-            if (actor == null || actor.role() != Role.OPERATOR) {
+            if (actor == null || !actor.can(Permission.NAVIGATE)) {
                 stopBestEffort();
                 finish("PERMISSION_REVOKED");
                 return;
@@ -103,7 +103,7 @@ public class NavigationService {
 
     public synchronized Accepted cancel(long actor) {
         var user=users.userById(actor);
-        RolePolicy.requireAny(user, Role.OPERATOR, Role.MONITOR);
+        RolePolicy.require(user, Permission.STOP);
         // Publish the established STOP first, even if the optional navigation protocol fails.
         long seq=gateway.publish(RobotCommand.STOP, clock.instant());
         String target=mission; mission=null;

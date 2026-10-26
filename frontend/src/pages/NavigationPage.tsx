@@ -3,7 +3,7 @@ import type { ApiClient } from '../api/client';
 import type { MapPose, NavigationStatus } from '../api/types';
 import { Card, ErrorNotice, StatusPill, errorMessage } from '../components/UI';
 import { MappingPanel } from '../mapping/MappingPanel';
-import { permissions, roleDescription } from '../auth/permissions';
+import { permissions } from '../auth/permissions';
 
 const REASONS: Record<string,string> = {
   NAVIGATION_DISABLED:'后端导航尚未启用',NO_LIVE_NAVIGATION_REPORT:'未收到新鲜导航报告',MAP_UNAVAILABLE:'没有可用的map地图',
@@ -32,17 +32,18 @@ const REASONS: Record<string,string> = {
   MOVE_BASE_SUCCEEDED:'已收到 move_base 到达反馈',
 };
 
-export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
+export function NavigationPage({api,role,grants}:{api:ApiClient;role:string;grants?:string[]}) {
   const [status,setStatus]=useState<NavigationStatus|null>(null);
   const [error,setError]=useState<string|null>(null);
   const [points,setPoints]=useState([{x:'',y:'',yaw:'0'}]);
   const [cycles,setCycles]=useState('1');
+  const [advanced,setAdvanced]=useState(false);
   const [busy,setBusy]=useState(false);
   const [notice,setNotice]=useState<string|null>(null);
   const goalReference=useRef<string|null>(null);
   const alive=useRef(true);
   const submitting=useRef(false);
-  const {move:canMove,stop:canStop}=permissions(role);
+  const {navigate:canMove,stop:canStop}=permissions(role,grants);
   const mission=!!status?.active || ['ACTIVE','PENDING'].includes(status?.robot?.state??'');
   const relative=status?.robot?.mode==='relative';
   const direct=relative&&!!status?.robot?.mapId?.startsWith('direct-');
@@ -133,29 +134,34 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
     relative&&status?.reason==='LOCALIZATION_UNAVAILABLE'?'odom → base_link里程计位姿不可用':
     REASONS[status?.reason??'']??status?.reason??'正在检查导航能力…';
   return <div className={`stack navigation-page${relative?' is-relative':''}`}>
-    {!canMove&&<p className="notice notice-info">{roleDescription(role)}</p>}
+    {!canMove&&<p className="fine-print">地图只读 · 无导航启动权限</p>}
     {error&&<ErrorNotice message={error}/>}
     {notice&&<div className="notice notice-info">{notice}</div>}
-    {!relative&&<MappingPanel api={api} role={role} mission={mission} navigation={status} navigationReason={reason}
+    {!relative&&<MappingPanel api={api} role={role} grants={grants} mission={mission} navigation={status} navigationReason={reason}
+      onPatrolMode={setAdvanced}
       navigationBusy={busy} onNavigate={goTo} onReference={id=>{
       if(goalReference.current&&goalReference.current!==id){goalReference.current=null;setPoints([{x:'',y:'',yaw:'0'}]);}
     }} onGoal={(pose,id)=>{
       if(id!==status?.robot?.mapId){setError('地图状态正在同步，请稍后重新选择。');return;}
       goalReference.current=id;
+      setAdvanced(true);
       const point={x:pose.x.toFixed(3),y:pose.y.toFixed(3),yaw:String(pose.yaw)};
       setPoints(old=>old.length===1&&!old[0].x&&!old[0].y?[point]:old.length<30?[...old,point]:old);
     }}/>}
-    <Card title={direct?'附近目标 · 纯里程计（无避障）':relative?'附近目标 · 实时避障':'目标点导航 / 多点巡逻'} actions={<StatusPill tone={status?.ready?'ok':'warn'}>{mission?'导航任务执行中':status?.ready?'导航就绪':'尚未就绪'}</StatusPill>}>
+    <Card title={direct?'附近目标 · 无避障':relative?'附近目标 · 激光避障':'导航任务'} actions={<>
+      {!relative&&canMove&&<button type="button" className="button ghost small" onClick={()=>setAdvanced(old=>!old)}>{advanced?'收起多点编辑':'编辑多点巡逻'}</button>}
+      <StatusPill tone={status?.ready?'ok':'warn'}>{mission?'执行中':status?.ready?'已就绪':'未就绪'}</StatusPill>
+    </>}>
       <p className="muted">{reason}</p>
       {direct&&<p className="notice notice-error">此模式没有自动避障能力：可能撞到人或障碍物。仅在清空行驶路径、现场有人监护且能立即急停时使用。</p>}
-      <p className="fine-print">{direct?'以收到目标时的里程计位姿为起点，前方为X正方向、左侧为Y正方向。小车先转向再前进，目标距离0.1至3米，无雷达安全检查。':relative?'以小车接受目标时的位置和朝向为起点，前方为X正方向、左侧为Y正方向。仅单点，直线距离0.1至3米；无需预存地图，使用实时激光障碍数据。':'仅使用已有地图的 map 坐标。小车自主规划与避障。'}切页或关闭浏览器后继续；需结束请主动停止。后端/MQTT失联时3秒租约到期停车。</p>
+      <p className="fine-print">{relative?'相对距离 0.1–3m，X 前后 / Y 左右。':'地图点位由车端规划。'} 切页仍执行；断链租约超时约3秒停车。</p>
       <div className="control-readout navigation-readout">
         <div><dt>真实执行状态</dt><dd>{robot?.state??'UNKNOWN'}</dd></div>
         <div><dt>点位进度</dt><dd>{robot?`${robot.pointIndex} / ${robot.totalPoints}`:'—'}</dd></div>
         <div><dt>{relative?'里程计位置（odom，米）':'定位（map，米）'}</dt><dd>{robot?.x==null||robot?.y==null?'—':`${robot.x.toFixed(2)}, ${robot.y.toFixed(2)}`}</dd></div>
         <div><dt>{relative?'导航会话':'地图指纹'}</dt><dd title={robot?.mapId??undefined}>{robot?.mapId?.slice(0,16)??'—'}</dd></div>
       </div>
-      {canMove&&<><div className="point-list">
+      {canMove&&(relative||advanced)&&<><div className="point-list">
         {points.map((point,index)=><div className={`point-row${relative?' relative-goal-row':''}`} key={index}>
           <span className="point-index">{index+1}</span>
           {(['x','y','yaw'] as const).map(key=><label key={key}>{relative?({x:'前后 m（前＋ / 后−）',y:'左右 m（左＋ / 右−）',yaw:'相对朝向 rad'})[key]:key==='yaw'?'朝向 rad':`${key.toUpperCase()} m`}
@@ -173,8 +179,7 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
       </div>
       </>}
       {canStop&&<button className="button danger" disabled={busy} onClick={()=>void cancel()}>取消导航并停止</button>}
-      {relative&&<p className="fine-print">例如前方2米、左侧1米：填写 X=2、Y=1、朝向=0。{direct?'直接按里程计转向及前进，不绕开障碍；位置丢失或超时会停车，最多执行60秒。':'雷达未观测区域或目标周围有障碍时会拒绝；无法绕行会终止，最多执行60秒。'}</p>}
-      {!status?.ready&&<p className="notice notice-info">{!canMove?'请由远程巡检操作员检查导航条件；当前账号可查看地图和执行状态。':direct?'请检查底盘、里程计定位及速度话题是否正常；本模式不需要雷达。':relative?'请保持底盘、雷达及相对导航进程运行，等待实时数据就绪；也可以继续人工遥控。':'可继续使用“控制”页人工遥控；地图、定位和避障条件就绪后再启动导航。'}</p>}
+      {!status?.ready&&relative&&<p className="notice notice-info">检查底盘、里程计和导航传感器；就绪前无法出发。</p>}
     </Card>
   </div>;
 }

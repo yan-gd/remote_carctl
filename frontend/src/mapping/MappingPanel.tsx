@@ -20,9 +20,9 @@ const MESSAGES:Record<string,string>={
   INITIAL_POSE_SUBSCRIBER_UNAVAILABLE:'定位节点尚未连接，请等待 AMCL 启动后重试确认位置。',
 };
 
-export function MappingPanel({api,role,mission,onGoal,onNavigate,onReference,navigation,navigationReason,navigationBusy}:{api:ApiClient;role:string;mission:boolean;
+export function MappingPanel({api,role,grants,mission,onGoal,onNavigate,onReference,onPatrolMode,navigation,navigationReason,navigationBusy}:{api:ApiClient;role:string;grants?:string[];mission:boolean;
   onGoal:(pose:MapPose,mapId:string)=>void;onNavigate:(pose:MapPose,mapId:string)=>Promise<void>;
-  onReference:(mapId:string|null)=>void;navigation:NavigationStatus|null;navigationReason:string;navigationBusy:boolean}) {
+  onReference:(mapId:string|null)=>void;onPatrolMode?:(active:boolean)=>void;navigation:NavigationStatus|null;navigationReason:string;navigationBusy:boolean}) {
   const [state,setState]=useState<MappingState|null>(null);
   const [grid,setGrid]=useState<MapGrid|null>(null);
   const [error,setError]=useState<string|null>(null);
@@ -34,7 +34,8 @@ export function MappingPanel({api,role,mission,onGoal,onNavigate,onReference,nav
   const [notice,setNotice]=useState<string|null>(null);
   const [pressed,setPressed]=useState<string|null>(null);
   const alive=useRef(true),reference=useRef(onReference);reference.current=onReference;
-  const {move:canMove,stop:canStop}=permissions(role);
+  const {move:canDrive,mapEdit:canEdit,navigate:canNavigate,stop:canStop}=permissions(role,grants);
+  const canMove=canEdit||canNavigate;
   const live=!!state?.online,robot=state?.robot;
   const busy=sending||navigationBusy||!!robot?.busy||!!state?.pending;
   const controller=useHoldControl(api,e=>{setPressed(null);setError(errorMessage(e));});
@@ -44,6 +45,11 @@ export function MappingPanel({api,role,mission,onGoal,onNavigate,onReference,nav
   const ready=sameMap&&!!navigation?.ready;
   const needsInitial=sameMap&&navigation?.reason==='INITIAL_POSE_REQUIRED';
   const waitingForLocalization=useRef(false);
+
+  useEffect(()=>{
+    if(!canNavigate&&canEdit)setPick('initial');
+    else if(!canEdit&&pick==='initial'&&!needsInitial)setPick('goal');
+  },[canNavigate,canEdit,needsInitial,pick]);
 
   useEffect(()=>{
     if(needsInitial){setPick('initial');waitingForLocalization.current=true;}
@@ -113,27 +119,27 @@ export function MappingPanel({api,role,mission,onGoal,onNavigate,onReference,nav
   function end(){setPressed(null);void controller.stop();}
   const feedback=robot?.message&&(MESSAGES[robot.message]??robot.message);
   return <Card title="地图工作台" className="mapping-panel" actions={<StatusPill tone={live?'ok':'warn'}>{live?MODES[robot!.mode]:'建图服务未连接'}</StatusPill>}>
-    <p className="muted">① 建图并保存 → ② 加载地图 → ③ 确认小车当前位置与朝向 → ④ 选目标，点击“前往此处”</p>
+    <div className="map-steps"><span>1 建图</span><span>2 加载</span><span>3 定位</span><span>4 选点</span></div>
     {error&&<ErrorNotice message={error}/>}
     {linkError&&<ErrorNotice message={linkError}/>}
     {feedback&&<p className={`notice ${robot?.result==='FAILED'?'notice-error':'notice-info'}`}>{feedback}</p>}
     {state?.delivery==='EXPIRED'&&<p className="notice notice-error">操作未在有效期内送达，请确认小车在线后重试。</p>}
     {notice&&<p className="fine-print">{notice}</p>}
-    {canMove&&<div className="mapping-controls">
-      <button className="button primary" disabled={!canMove||!live||busy||mission||mapping} onClick={()=>void command({action:'START'})}>开始新建地图</button>
-      <label>新地图名称<input aria-label="新地图名称" placeholder="例如 lab-floor1" maxLength={40} value={name} disabled={!canMove||busy} onChange={e=>setName(e.target.value)}/></label>
-      <button className="button" disabled={!canMove||!mapping||busy||!robot?.mapId||!/^[-\w]{1,40}$/.test(name)} onClick={()=>void command({action:'SAVE',name})}>保存地图</button>
-      <label>已保存地图<select aria-label="已保存地图" value={saved} disabled={!canMove||busy} onChange={e=>setSaved(e.target.value)}>
+    {canEdit&&<div className="mapping-controls">
+      <button className="button primary" disabled={!live||busy||mission||mapping} onClick={()=>void command({action:'START'})}>开始新建地图</button>
+      <label>地图名称<input aria-label="新地图名称" placeholder="如 lab-floor1" maxLength={40} value={name} disabled={busy} onChange={e=>setName(e.target.value)}/></label>
+      <button className="button" disabled={!mapping||busy||!robot?.mapId||!/^[-\w]{1,40}$/.test(name)} onClick={()=>void command({action:'SAVE',name})}>保存</button>
+      <label>已保存地图<select aria-label="已保存地图" value={saved} disabled={busy} onChange={e=>setSaved(e.target.value)}>
         <option value="">选择地图</option>{robot?.maps.map(n=><option key={n} value={n}>{n}</option>)}
       </select></label>
-      <button className="button" disabled={!canMove||!live||busy||mission||!saved||!robot?.maps.includes(saved)} onClick={()=>void command({action:'LOAD',name:saved})}>加载地图导航</button>
-      <button className="button" disabled={!canMove||!live||busy||mission||robot?.mode==='IDLE'} onClick={()=>void command({action:'STOP'})}>结束地图作业</button>
+      <button className="button" disabled={!live||busy||mission||!saved||!robot?.maps.includes(saved)} onClick={()=>void command({action:'LOAD',name:saved})}>加载地图</button>
+      <button className="button" disabled={!live||busy||mission||robot?.mode==='IDLE'} onClick={()=>void command({action:'STOP'})}>结束作业</button>
     </div>}
-    {!live&&<p className="notice notice-info">等待小车连接 Web 建图服务。连接后，可在这里完成建图与导航，无需打开小车图形界面。</p>}
-    {mapping&&canMove&&<div className="mapping-drive">
-      <span>按住遥控采集地图，松开即停止。请缓慢绕行并回到起点附近。</span>
+    {!live&&<p className="notice notice-info">建图服务未连接</p>}
+    {mapping&&canDrive&&<div className="mapping-drive">
+      <span>按住遥控建图 · 松开即停</span>
       {(['LEFT','FORWARD','BACKWARD','RIGHT'] as const).map((value,i)=><button key={value} className={`button ${pressed===value?'primary':''}`}
-        disabled={!canMove||busy} aria-label={`建图${['左转','前进','后退','右转'][i]}`}
+        disabled={!canDrive||busy} aria-label={`建图${['左转','前进','后退','右转'][i]}`}
         onPointerDown={e=>{if(e.button!==0)return;e.preventDefault();e.currentTarget.setPointerCapture?.(e.pointerId);setPressed(value);void controller.start(value);}}
         onPointerUp={end} onPointerCancel={end} onLostPointerCapture={end}
         onKeyDown={e=>{if((e.key===' '||e.key==='Enter')&&!e.repeat){e.preventDefault();setPressed(value);void controller.start(value);}}}
@@ -145,14 +151,14 @@ export function MappingPanel({api,role,mission,onGoal,onNavigate,onReference,nav
         <p className="notice notice-error">上次导航已停止：{navigationReason}</p>}
       {robot?.mode==='NAVIGATION'&&<div className="notice notice-info" role="status">
         {!canMove?(mission?'小车正在执行导航，可查看地图、激光与路径。':'地图只读：由远程巡检操作员完成定位与选点导航。'):mission?'正在执行导航，可使用“取消导航并停止”结束任务。':needsInitial?
-          '先定位小车：请在地图上点击小车当前实际所在的位置，朝车头方向拖动，再点击“确认小车初始位置”。这一步完成后才能选择目的地。':
-          ready?'导航已就绪：核对橙色激光与地图轮廓对齐后，选择目的地并点击“前往此处”。':
-          `暂不能出发：${sameMap?navigationReason:'地图与导航状态正在同步，请稍候。'}`}
-        {!needsInitial&&!ready&&!mission&&canMove&&<button className="button" disabled={busy} onClick={()=>setPick('initial')}>重新设置小车位置</button>}
+          '先定位小车：标记真实位置和朝向，核对激光对齐。':
+          ready?'导航就绪 · 选取目标点后点击“前往此处”':
+          `暂不能出发：${sameMap?navigationReason:'等待地图同步'}`}
+        {!needsInitial&&!ready&&!mission&&canEdit&&<button className="button" disabled={busy} onClick={()=>setPick('initial')}>重新定位</button>}
       </div>}
       {canMove&&<div className="mapping-controls">
-        <label>地图操作<select aria-label="地图操作" value={pick} onChange={e=>setPick(e.target.value as 'goal'|'initial'|'patrol')} disabled={!canMove||busy||mission}>
-          <option value="goal">前往地图目标</option><option value="initial">设置小车初始位置</option><option value="patrol">编辑多点巡逻</option>
+        <label>地图操作<select aria-label="地图操作" value={pick} onChange={e=>{const next=e.target.value as 'goal'|'initial'|'patrol';setPick(next);onPatrolMode?.(next==='patrol');}} disabled={!canMove||busy||mission}>
+          {canNavigate&&<option value="goal">前往地图目标</option>}{canEdit&&<option value="initial">设置小车初始位置</option>}{canNavigate&&<option value="patrol">编辑多点巡逻</option>}
         </select></label>
         <span>{mapping?'地图正在更新，建图完成并加载后可选点。':pick==='initial'?'在小车实际位置按下，再沿车头方向拖动。':'在目标位置按下，拖动指定到达时的朝向。'}</span>
       </div>}
@@ -162,13 +168,13 @@ export function MappingPanel({api,role,mission,onGoal,onNavigate,onReference,nav
         <span>{pick==='initial'?'小车初始位置':'目的地'}：X {selection.pose.x.toFixed(2)} m，Y {selection.pose.y.toFixed(2)} m</span>
         <label>朝向（弧度）<input type="number" step="0.1" min={-Math.PI} max={Math.PI} aria-label="地图选点朝向" value={Math.max(-Math.PI,Math.min(Math.PI,Number(selection.pose.yaw.toFixed(3))))}
           onChange={e=>{const yaw=Number(e.target.value);if(Number.isFinite(yaw)&&Math.abs(yaw)<=Math.PI)setSelection({...selection,pose:{...selection.pose,yaw}});}}/></label>
-        <button className="button primary" disabled={!canPick||selection.mapId!==robot?.mapId||(pick==='goal'&&!ready)} onClick={()=>{
+        <button className="button primary" disabled={!canPick||selection.mapId!==robot?.mapId||(pick==='goal'&&!ready)||(pick==='initial'?!canEdit:!canNavigate)} onClick={()=>{
           if(pick==='initial')void command({action:'INITIAL_POSE',mapId:selection.mapId,pose:selection.pose});
           else if(pick==='goal')void navigate();
           else {onGoal(selection.pose,selection.mapId);setNotice('巡逻点已加入下方列表，编辑完成后点击“开始导航”。');}
         }}>{pick==='initial'?'确认小车初始位置':pick==='goal'?'前往此处':'加入巡逻点'}</button>
       </div>}
     </>:<div className="map-empty">{mapping?'等待第一张实时地图，请确认雷达和里程计正常。':'开始建图或加载已保存地图后，这里将显示真实地图。'}</div>}
-    {robot?.mode==='NAVIGATION'&&<p className="fine-print">蓝色箭头是小车位置，橙色点是实时激光，绿色线是近期规划路径。设置初始位置后，请先核对激光轮廓与地图对齐。</p>}
+    {robot?.mode==='NAVIGATION'&&<p className="map-legend">蓝色：小车　橙色：激光　绿色：路径</p>}
   </Card>;
 }

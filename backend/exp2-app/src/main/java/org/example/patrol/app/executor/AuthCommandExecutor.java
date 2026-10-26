@@ -35,7 +35,7 @@ public class AuthCommandExecutor {
     @Transactional
     public UserView register(AuthCommand c) {
         User.validateCredentials(c.username(), c.password());
-        if (users.userByName(c.username()) != null) throw BusinessException.conflict("用户名已存在");
+        if (users.userByNameIncludingDisabled(c.username()) != null) throw BusinessException.conflict("用户名已存在或已停用");
         var u =
                 users.insertUser(
                         new User(

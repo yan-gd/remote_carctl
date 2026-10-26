@@ -32,7 +32,7 @@ describe('autonomous navigation page',()=>{
     expect(api.mapCommand).toHaveBeenCalledWith({action:'INITIAL_POSE',mapId:'map-a',pose:{x:1.2345,y:2.3456,yaw:0.3}});
     expect(api.startNavigation).not.toHaveBeenCalled();
     // The command receipt alone must not declare navigation ready.
-    expect(screen.getByRole('button',{name:'开始导航'})).toBeDisabled();
+    expect(screen.queryByRole('button',{name:'开始导航'})).not.toBeInTheDocument();
     api.navigationStatus.mockResolvedValue(ready);
     await act(async()=>{await vi.advanceTimersByTimeAsync(1000);});
     expect(screen.getByLabelText('地图操作')).toHaveValue('goal');
@@ -84,6 +84,7 @@ describe('autonomous navigation page',()=>{
     });
     const view=render(<NavigationPage api={api as unknown as ApiClient} role="OPERATOR"/>);
     await act(async()=>{});
+    fireEvent.click(screen.getByRole('button',{name:'编辑多点巡逻'}));
     fireEvent.change(screen.getByLabelText('目标点1 x'),{target:{value:'1'}});
     fireEvent.change(screen.getByLabelText('目标点1 y'),{target:{value:'2'}});
     await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'开始导航'}));});
@@ -107,7 +108,7 @@ describe('autonomous navigation page',()=>{
     api.navigationStatus.mockResolvedValue({...ready,robot:{...ready.robot!,mode:'relative',frame:'odom',mapId:'relative-session'}});
     const view=render(<NavigationPage api={api as unknown as ApiClient} role="OPERATOR"/>);
     await act(async()=>{});
-    expect(screen.getByText('附近目标 · 实时避障')).toBeInTheDocument();
+    expect(screen.getByText('附近目标 · 激光避障')).toBeInTheDocument();
     expect(screen.queryByRole('button',{name:'添加目标点'})).not.toBeInTheDocument();
     expect(screen.queryByText('轮次')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('前后距离'),{target:{value:'2'}});
@@ -122,9 +123,9 @@ describe('autonomous navigation page',()=>{
     api.navigationStatus.mockResolvedValue({...ready,robot:{...ready.robot!,mode:'relative',frame:'odom',mapId:'direct-session'}});
     render(<NavigationPage api={api as unknown as ApiClient} role="OPERATOR"/>);
     await act(async()=>{});
-    expect(screen.getByText('附近目标 · 纯里程计（无避障）')).toBeInTheDocument();
+    expect(screen.getByText('附近目标 · 无避障')).toBeInTheDocument();
     expect(screen.getByText(/可能撞到人或障碍物/)).toBeInTheDocument();
-    expect(screen.queryByText('附近目标 · 实时避障')).not.toBeInTheDocument();
+    expect(screen.queryByText('附近目标 · 激光避障')).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('前后距离'),{target:{value:'1'}});
     fireEvent.change(screen.getByLabelText('左右距离'),{target:{value:'0'}});
     await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'开始导航'}));});
@@ -134,6 +135,7 @@ describe('autonomous navigation page',()=>{
     const api=client();
     render(<NavigationPage api={api as unknown as ApiClient} role="OPERATOR"/>);
     await act(async()=>{});
+    fireEvent.click(screen.getByRole('button',{name:'编辑多点巡逻'}));
     fireEvent.change(screen.getByLabelText('目标点1 x'),{target:{value:'100'}});
     api.navigationStatus.mockResolvedValue({...ready,robot:{...ready.robot!,mode:'relative',frame:'odom',mapId:'relative-session'}});
     await act(async()=>{await vi.advanceTimersByTimeAsync(1000);});

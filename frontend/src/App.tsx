@@ -13,6 +13,7 @@ import { LoginPage } from './pages/LoginPage';
 import { LogsPage } from './pages/LogsPage';
 import { CameraPage } from './pages/CameraPage';
 import { NavigationPage } from './pages/NavigationPage';
+import { UsersPage } from './pages/UsersPage';
 import { RobotProvider } from './robot/RobotContext';
 
 export default function App() {
@@ -39,6 +40,14 @@ export default function App() {
     };
   }, [api]);
 
+  useEffect(()=>{
+    if(!user)return;
+    let active=true;
+    const sync=async()=>{try{const next=await api.me();if(active)setUser(next);}catch{/* 401 handled by client */}};
+    const timer=window.setInterval(()=>void sync(),15000);
+    return()=>{active=false;window.clearInterval(timer);};
+  },[api,!!user]);
+
   async function login(username: string, password: string) {
     setBusy(true);
     setError(null);
@@ -58,7 +67,7 @@ export default function App() {
     // Best-effort STOP before the token is discarded; the robot watchdog is the
     // fallback if the network is already gone.
     try {
-      if(user&&permissions(user.role).stop)await api.control('STOP');
+      if(user&&permissions(user.role,user.permissions).stop)await api.control('STOP');
     } catch {
       // Ignore: logout must still clear the local session.
     }
@@ -96,6 +105,7 @@ export default function App() {
           api={api}
           username={user.username}
           role={user.role}
+          grants={user.permissions}
           active={tab}
           onNavigate={setTab}
           onLogout={logout}
@@ -103,10 +113,11 @@ export default function App() {
         >
           {tab === 'dashboard' && <DashboardPage />}
           {tab === 'camera' && <CameraPage api={api} />}
-          {tab === 'navigation' && <NavigationPage api={api} role={user.role} />}
-          {tab === 'control' && permissions(user.role).move && <ControlPage api={api} role={user.role} />}
-          {tab === 'alarms' && <AlarmsPage api={api} role={user.role} />}
-          {tab === 'logs' && <LogsPage api={api} role={user.role} />}
+          {tab === 'navigation' && <NavigationPage api={api} role={user.role} grants={user.permissions} />}
+          {tab === 'control' && permissions(user.role,user.permissions).move && <ControlPage api={api} role={user.role} grants={user.permissions} />}
+          {tab === 'alarms' && <AlarmsPage api={api} role={user.role} grants={user.permissions} />}
+          {tab === 'logs' && <LogsPage api={api} role={user.role} grants={user.permissions} />}
+          {tab === 'users' && user.role==='ADMIN' && <UsersPage api={api}/>}
         </Shell>
       </RobotProvider>
     );

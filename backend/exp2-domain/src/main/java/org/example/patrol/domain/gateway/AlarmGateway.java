@@ -13,7 +13,8 @@ public interface AlarmGateway {
             AlarmLevel level,
             AlarmStatus status,
             java.time.Instant from,
-            java.time.Instant to);
+            java.time.Instant to,
+            String keyword);
 
     void seedDemoAlarm();
 

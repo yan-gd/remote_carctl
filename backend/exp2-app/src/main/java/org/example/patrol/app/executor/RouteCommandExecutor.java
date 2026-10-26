@@ -26,7 +26,7 @@ public class RouteCommandExecutor {
 
     private User actor(long id) {
         var u = users.userById(id);
-        RolePolicy.require(u, Role.OPERATOR);
+        RolePolicy.require(u, Permission.PATROL_EDIT);
         return u;
     }
 

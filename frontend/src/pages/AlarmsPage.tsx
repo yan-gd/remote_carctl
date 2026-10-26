@@ -26,7 +26,7 @@ const STATUSES = [
   { value: 'ACKNOWLEDGED', label: '已确认' },
 ];
 
-export function AlarmsPage({ api, role }: { api: ApiClient; role: string }) {
+export function AlarmsPage({ api, role, grants }: { api: ApiClient; role: string; grants?: string[] }) {
   const [items, setItems] = useState<AlarmItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -36,34 +36,30 @@ export function AlarmsPage({ api, role }: { api: ApiClient; role: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const requestId = useRef(0);
-  const inFlight=useRef(false),ackPending=useRef(false),alive=useRef(true);
+  const ackPending=useRef(false),alive=useRef(true);
   const [from,setFrom]=useState(''),[to,setTo]=useState('');
+  const [query,setQuery]=useState(''),[keyword,setKeyword]=useState('');
   const [notice,setNotice]=useState<string|null>(null);
-  const [updatedAt,setUpdatedAt]=useState<string|null>(null);
-  const canAcknowledge=permissions(role).acknowledge;
+  const canAcknowledge=permissions(role,grants).acknowledge;
 
   const load = useCallback(async () => {
-    if(inFlight.current)return;
-    inFlight.current=true;
     const id = ++requestId.current;
     setLoading(true);
     setError(null);
     try {
       if(from&&to&&from>to)throw new Error('开始时间不能晚于结束时间。');
-      const result = await api.alarms({ page, size: 20, level, status,
+      const result = await api.alarms({ page, size: 20, level, status, q:keyword,
         from:from?new Date(from).toISOString():undefined,to:to?new Date(to).toISOString():undefined });
       if (id !== requestId.current) return;
       setItems(result.items);
       setTotal(result.total);
-      setUpdatedAt(new Date().toISOString());
       if(page>1&&result.items.length===0&&result.total<=(page-1)*20)setPage(Math.max(1,Math.ceil(result.total/20)));
     } catch (caught) {
       if (id === requestId.current) setError(errorMessage(caught));
     } finally {
-      inFlight.current=false;
       if (id === requestId.current) setLoading(false);
     }
-  }, [api, level, page, status, from, to]);
+  }, [api, level, page, status, from, to, keyword]);
 
   useEffect(() => {
     alive.current=true;
@@ -83,7 +79,7 @@ export function AlarmsPage({ api, role }: { api: ApiClient; role: string }) {
       if(!alive.current)return;
       ++requestId.current;
       setItems(old=>old.map(row=>row.id===item.id?acknowledged:row));
-      setNotice(`告警 #${item.id} 已确认并记录处理人。确认表示已知悉，不代表障碍或设备故障已消除。`);
+      setNotice(`告警 #${item.id} 已确认。故障状态请以实时数据为准。`);
       await load();
     } catch (caught) {
       if(!alive.current)return;
@@ -97,7 +93,7 @@ export function AlarmsPage({ api, role }: { api: ApiClient; role: string }) {
 
   return (
     <Card
-      title="告警处理"
+      title="告警记录"
       actions={
         <>
           <select
@@ -134,12 +130,14 @@ export function AlarmsPage({ api, role }: { api: ApiClient; role: string }) {
         </>
       }
     >
-      <p className="muted">{canAcknowledge?'当前为安全监控值班员：核对告警与现场情况后，可确认告警并留存处理记录。':'当前账号可查看告警；按角色权限，仅安全监控值班员可确认。请使用 MONITOR 角色账号处理。'}</p>
-      <p className="fine-print">每 3 秒自动刷新。确认不会删除告警，也不会解除停车保护或自动恢复导航。</p>
-      <div className="mapping-controls history-filters">
-        <label>开始时间<input type="datetime-local" value={from} onChange={e=>{setFrom(e.target.value);setPage(1);}}/></label>
-        <label>结束时间<input type="datetime-local" value={to} onChange={e=>{setTo(e.target.value);setPage(1);}}/></label>
-        <span className="fine-print">共 {total} 条 · 最近同步 {formatDateTime(updatedAt)}</span>
+      <div className="data-toolbar">
+        <form className="search-form" onSubmit={e=>{e.preventDefault();setPage(1);setKeyword(query.trim());}}>
+          <input aria-label="搜索告警" placeholder="搜索告警、设备或描述" value={query} maxLength={80} onChange={e=>setQuery(e.target.value)}/>
+          <button type="submit" className="button small">搜索</button>
+        </form>
+        <label>从<input aria-label="开始时间" type="datetime-local" value={from} onChange={e=>{setFrom(e.target.value);setPage(1);}}/></label>
+        <label>至<input aria-label="结束时间" type="datetime-local" value={to} onChange={e=>{setTo(e.target.value);setPage(1);}}/></label>
+        <span className="fine-print">{total} 条 · 3秒同步</span>
       </div>
       {notice&&<p className="notice notice-info" role="status">{notice}</p>}
       {error && <ErrorNotice message={error} onRetry={() => void load()} />}
@@ -148,38 +146,20 @@ export function AlarmsPage({ api, role }: { api: ApiClient; role: string }) {
       ) : items.length === 0 ? (
         <Empty>没有符合条件的告警。</Empty>
       ) : (
-        <div className="list">
-          {items.map((item) => (
-            <article className="list-item" key={item.id}>
-              <div className="list-main">
-                <div className="pill-row">
-                  <StatusPill tone={alarmTone(item.level)}>
-                    {alarmLevelLabel(item.level)}
-                  </StatusPill>
-                  <StatusPill tone={item.status === 'ACKNOWLEDGED' ? 'ok' : 'warn'}>
-                    {item.status === 'ACKNOWLEDGED' ? '已确认' : '未确认'}
-                  </StatusPill>
-                  <span className="muted small">{item.source}</span>
-                </div>
-                <h3>{item.title}</h3>
-                <p className="muted">{item.description ?? '—'}</p>
-                <span className="fine-print">#{item.id} · 发生于 {formatDateTime(item.occurredAt)}</span>
-                <p className="fine-print">处理建议：{alarmAdvice(item.source)}</p>
-                {item.status==='ACKNOWLEDGED'&&<p className="fine-print">确认人 ID：{item.acknowledgedBy??'—'} · 确认时间：{formatDateTime(item.acknowledgedAt)}</p>}
-              </div>
-              {canAcknowledge && item.status === 'UNACKNOWLEDGED' && (
-                <button
-                  type="button"
-                  className="button small"
-                  disabled={busyId !== null}
-                  onClick={() => void acknowledge(item)}
-                >
-                  {busyId === item.id ? '确认中…' : '确认告警'}
-                </button>
-              )}
-            </article>
-          ))}
-        </div>
+        <div className="table-wrap"><table className="data-table alarm-table">
+          <thead><tr><th>时间</th><th>级别</th><th>告警内容</th><th>设备 / 来源</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody>{items.map(item=><tr key={item.id}>
+            <td className="nowrap">{formatDateTime(item.occurredAt)}</td>
+            <td><StatusPill tone={alarmTone(item.level)}>{alarmLevelLabel(item.level)}</StatusPill></td>
+            <td className="alarm-title-cell"><strong>{item.title}</strong>
+              <details><summary>查看详情</summary><p>{item.description??'—'}</p><p>建议：{alarmAdvice(item.source)}</p>
+                {item.status==='ACKNOWLEDGED'&&<p>确认人 #{item.acknowledgedBy} · {formatDateTime(item.acknowledgedAt)}</p>}
+              </details></td>
+            <td className="nowrap">{item.source}</td>
+            <td><StatusPill tone={item.status==='ACKNOWLEDGED'?'ok':'warn'}>{item.status==='ACKNOWLEDGED'?'已确认':'未确认'}</StatusPill></td>
+            <td>{canAcknowledge&&item.status==='UNACKNOWLEDGED'?<button type="button" className="button small" disabled={busyId!==null} onClick={()=>void acknowledge(item)}>{busyId===item.id?'确认中…':'确认'}</button>:<span className="fine-print">—</span>}</td>
+          </tr>)}</tbody>
+        </table></div>
       )}
       <Pager page={page} size={20} total={total} onChange={setPage} />
     </Card>

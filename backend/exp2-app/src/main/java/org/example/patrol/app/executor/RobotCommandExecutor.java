@@ -51,11 +51,8 @@ public class RobotCommandExecutor {
         var user = users.userById(actor);
         String requested = c == null ? null : c.command();
         try {
-            RolePolicy.requireAny(user, Role.OPERATOR, Role.MONITOR);
             var command = RobotCommand.parse(requested);
-            if (command != RobotCommand.STOP && user.role() != Role.OPERATOR)
-                throw new BusinessException(
-                        BusinessException.Kind.FORBIDDEN, "FORBIDDEN", "监控员只能下发STOP停止命令");
+            RolePolicy.require(user, command == RobotCommand.STOP ? Permission.STOP : Permission.MOVE);
             if (!gateway.connected())
                 throw BusinessException.unavailable("MQTT_UNAVAILABLE", "MQTT服务不可用，命令未下发");
             if (command.isMotion() && !monitor.online())

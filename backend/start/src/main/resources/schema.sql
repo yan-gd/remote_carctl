@@ -5,6 +5,13 @@ CREATE TABLE IF NOT EXISTS sys_user (
  role TEXT NOT NULL CHECK(role IN ('OPERATOR','MONITOR','MAINTAINER','VIEWER')),
  created_at INTEGER NOT NULL
 );
+-- Additive access table: existing sys_user rows and all foreign-key audit history remain intact.
+CREATE TABLE IF NOT EXISTS sys_user_access (
+ user_id INTEGER PRIMARY KEY REFERENCES sys_user(id) ON DELETE RESTRICT,
+ permissions TEXT NOT NULL,
+ is_admin INTEGER NOT NULL DEFAULT 0 CHECK(is_admin IN (0,1)),
+ disabled INTEGER NOT NULL DEFAULT 0 CHECK(disabled IN (0,1))
+);
 CREATE TABLE IF NOT EXISTS patrol_route (
  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL CHECK(length(trim(name)) BETWEEN 1 AND 100),
  description TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL

@@ -59,7 +59,8 @@ public final class ApiModels {
                     @Pattern(regexp = "DRAFT|PLANNED|CANCELLED")
                     String status) {}
 
-    public record UserView(Long id, String username, String role, Instant createdAt) {}
+    public record UserView(Long id, String username, String role, Instant createdAt,
+                           List<String> permissions, boolean active) {}
 
     public record TokenView(String token, String tokenType, long expiresIn, UserView user) {}
 
@@ -114,5 +115,10 @@ public final class ApiModels {
             String level,
             String operation,
             Instant from,
-            Instant to) {}
+            Instant to,
+            String keyword) {
+        public Query(int page, int size, String status, String level, String operation, Instant from, Instant to) {
+            this(page, size, status, level, operation, from, to, null);
+        }
+    }
 }

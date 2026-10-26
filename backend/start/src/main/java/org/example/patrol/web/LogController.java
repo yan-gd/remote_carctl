@@ -33,11 +33,12 @@ public class LogController {
             @io.swagger.v3.oas.annotations.Parameter(hidden = true) @AuthenticationPrincipal
                     Actor actor,
             @RequestParam(required = false) String operation,
+            @RequestParam(required = false) String q,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
                     Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
                     Instant to) {
         return ApiResponse.success(
-                service.logs(new Query(page, size, null, null, operation, from, to), actor.id()));
+                service.logs(new Query(page, size, null, null, operation, from, to, q), actor.id()));
     }
 }

@@ -77,7 +77,7 @@ public class MappingService {
     }
     public synchronized Command command(Request request,long actor) {
         var user=users.userById(actor);
-        RolePolicy.require(user,Role.OPERATOR);
+        RolePolicy.require(user,Permission.MAP_EDIT);
         expire();
         if (!online()) throw BusinessException.unavailable("MAPPING_OFFLINE","小车 Web 建图服务未连接");
         if (pending!=null || report.busy()) throw BusinessException.conflict("上一操作尚未完成");

@@ -12,6 +12,8 @@ import type {
   RouteInput,
   TaskInput,
   UserView,
+  UserInput,
+  UserChange,
 } from './types';
 
 export class ApiError extends Error {
@@ -99,6 +101,20 @@ export class ApiClient {
     return this.request<UserView>('/api/v1/auth/me');
   }
 
+  users(): Promise<UserView[]> { return this.request('/api/v1/admin/users'); }
+
+  createUser(input: UserInput): Promise<UserView> {
+    return this.request('/api/v1/admin/users', {method: 'POST', body: input});
+  }
+
+  updateUser(id: number, input: UserChange): Promise<UserView> {
+    return this.request(`/api/v1/admin/users/${id}`, {method: 'PUT', body: input});
+  }
+
+  async deleteUser(id: number): Promise<void> {
+    await this.request(`/api/v1/admin/users/${id}`, {method: 'DELETE'});
+  }
+
   robot(): Promise<RobotInfo> {
     return this.request<RobotInfo>('/api/v1/robot');
   }
@@ -179,6 +195,7 @@ export class ApiClient {
     status?: string;
     from?: string;
     to?: string;
+    q?: string;
   } = {}): Promise<PageResult<AlarmItem>> {
     return this.request<PageResult<AlarmItem>>('/api/v1/alarms', {
       query: {
@@ -188,6 +205,7 @@ export class ApiClient {
         status: params.status,
         from: params.from,
         to: params.to,
+        q: params.q,
       },
     });
   }
@@ -202,6 +220,7 @@ export class ApiClient {
     operation?: string;
     from?: string;
     to?: string;
+    q?: string;
   } = {}): Promise<PageResult<ControlLogItem>> {
     return this.request<PageResult<ControlLogItem>>('/api/v1/control-logs', {
       query: {
@@ -210,6 +229,7 @@ export class ApiClient {
         operation: params.operation,
         from: params.from,
         to: params.to,
+        q: params.q,
       },
     });
   }
