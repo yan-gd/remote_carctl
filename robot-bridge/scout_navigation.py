@@ -65,6 +65,9 @@ class NavigationManager:
         self.lease_at = 0
         self.goal_at = 0
         self.map_id = None
+        self.map_snapshot = (None, None)
+        self.map_lock = threading.Lock()
+        self.map_generation = 0
         self.velocity = (0.0, 0.0)
         self.velocity_at = 0
         self.generation = 0
@@ -270,10 +273,12 @@ class Ros1NavigationAdapter:
         rospy.Subscriber(config['pose_topic'], PoseStamped, self._pose, queue_size=1)
         self.ros = ros
         env = dict(os.environ)
-        env.pop('PYTHONHOME', None)
+        for key in ('PYTHONHOME', 'PATROL_MAPPING_DEVICE_KEY', 'PATROL_CAMERA_DEVICE_KEY', 'SCOUT_RTSP_PASSWORD'):
+            env.pop(key, None)
         self.pose_process = subprocess.Popen([
             config['pose_python'], os.path.join(os.path.dirname(__file__), 'ros1_tf_pose.py'),
-            '--frame', config['frame'], '--base', config['base_frame'], '--topic', config['pose_topic']], env=env)
+            '--frame', config['frame'], '--base', config['base_frame'], '--topic', config['pose_topic'],
+            '--scan-topic', config['scan_topic']], env=env)
         # Master/action/TF checks may block. Keep them off the velocity/STOP thread.
         threading.Thread(target=self._check_loop, daemon=True).start()
 
@@ -285,17 +290,25 @@ class Ros1NavigationAdapter:
             time.sleep(0.2)
 
     def _map(self, msg):
+        with self.map_lock:
+            generation = self.map_generation
+            web = getattr(self, 'web_mapping', None)
+            if web and getattr(msg, '_connection_header', {}).get('callerid') != web.map_source:
+                return
         if not msg.info.width or not msg.info.height or not math.isfinite(msg.info.resolution) or msg.info.resolution < 0.005:
             return
         if len(msg.data) != msg.info.width * msg.info.height or len(msg.data) > 16_000_000:
             return
-        self.map = msg
         metadata = [msg.header.frame_id, msg.info.width, msg.info.height, msg.info.resolution,
                     msg.info.origin.position.x, msg.info.origin.position.y,
                     msg.info.origin.orientation.z, msg.info.origin.orientation.w]
         digest = hashlib.sha256(json.dumps(metadata).encode())
         digest.update(bytes(bytearray((v + 1) % 256 for v in msg.data)))
-        self.map_id = digest.hexdigest()
+        with self.map_lock:
+            if generation != self.map_generation:
+                return
+            self.map, self.map_id = msg, digest.hexdigest()
+            self.map_snapshot = (msg, self.map_id)
 
     def _scan(self, msg):
         if msg.ranges and any(math.isfinite(v) and msg.range_min < v < msg.range_max for v in msg.ranges):
@@ -339,6 +352,10 @@ class Ros1NavigationAdapter:
         result = dict(ready=False, reason='MAP_UNAVAILABLE', map_id=self.map_id,
                       frame=self.config['frame'], x=None, y=None, yaw=None)
         try:
+            web = getattr(self, 'web_mapping', None)
+            if web and (web.busy or web.mode != 'NAVIGATION'):
+                result['reason'] = 'WEB_MAPPING_ACTIVE' if web.mode == 'MAPPING' else 'WEB_MAP_NOT_LOADED'
+                return result
             if self.map is None or self.map.header.frame_id != self.config['frame']:
                 return result
             result['reason'] = 'INITIAL_POSE_REQUIRED'

@@ -277,6 +277,12 @@ export class ApiClient {
     return suffix ? `${base}?${suffix}` : base;
   }
 
+  mappingStatus() { return this.request<import('./types').MappingState>('/api/v1/mapping'); }
+  mappingGrid() { return this.request<import('./types').MapGrid>('/api/v1/mapping/grid'); }
+  mapCommand(request: import('./types').MapRequest) {
+    return this.request<{id:string}>('/api/v1/mapping/commands', {method:'POST',body:request});
+  }
+
   private async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (options.body !== undefined) {

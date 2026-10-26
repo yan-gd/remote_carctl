@@ -32,6 +32,7 @@ class CameraNavigationApiTest {
         r.add("patrol.database.path",db::toString);
         r.add("patrol.mqtt.enabled",()->false);
         r.add("PATROL_CAMERA_DEVICE_KEY",()->KEY);
+        r.add("PATROL_MAPPING_DEVICE_KEY",()->KEY+"-mapping");
         r.add("PATROL_NAVIGATION_ENABLED",()->true);
     }
     @TestConfiguration @Profile("camera-navigation-test") static class LinkConfig {
@@ -51,6 +52,26 @@ class CameraNavigationApiTest {
     @Autowired UserGateway users;
     @Autowired TokenGateway tokens;
     @Autowired ObjectMapper json;
+
+    @Test void mappingRequiresSeparateDeviceCredentialAndOperatorRole() throws Exception {
+        String body="{\"session\":\"test-session\",\"mode\":\"NAVIGATION\",\"busy\":false,\"mapId\":\"map-a\",\"maps\":[\"lab\"],\"pose\":null,\"scan\":[],\"path\":[],\"commandId\":null,\"result\":null,\"message\":null}";
+        mvc.perform(get("/api/v1/mapping")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/v1/device/mapping/exchange").header("X-Device-Key",KEY)
+            .contentType("application/json").content(body)).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/v1/device/mapping/exchange").header("X-Device-Key",KEY+"-mapping")
+            .contentType("application/json").content(body)).andExpect(status().isOk());
+        mvc.perform(get("/api/v1/mapping").header("Authorization",token(Role.VIEWER)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.online").value(true));
+        for(Role role:List.of(Role.VIEWER,Role.MONITOR))
+            mvc.perform(post("/api/v1/mapping/commands").header("Authorization",token(role))
+                .contentType("application/json").content("{\"action\":\"LOAD\",\"name\":\"lab\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/mapping/commands").header("Authorization",token(Role.OPERATOR))
+            .contentType("application/json").content("{\"action\":\"LOAD\",\"name\":\"lab\"}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.session").value("test-session"));
+        mvc.perform(put("/api/v1/device/mapping/grid").header("X-Device-Key",KEY+"-mapping")
+            .contentType("application/json").content(new byte[384*1024+1])).andExpect(status().isBadRequest());
+    }
 
     String token(Role role) {
         var name="new_api_"+role;

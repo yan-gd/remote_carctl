@@ -14,6 +14,8 @@
 
 当前部署进度、现场验证证据、已知问题和后续 Agent 交接见 [`PROGRESS.md`](PROGRESS.md)。
 
+**Web 建图与地图选点**：新增[无 RViz 的 Web 建图、定位与导航工作台](docs/WEB-MAPPING.md)。用 `bash robot-bridge/start-scout.sh --web-map` 启动后，可在网页遥控建图、保存/加载地图、设置初始位置和选点导航。需要一次性部署建图设备密钥；当前为本地实现，尚未实车验收。
+
 **2026-10-25 新增**：[目标点导航、多点巡逻与 D435 实时画面部署](docs/NAVIGATION-CAMERA.md)。Web 已增加“导航”和“摄像头”入口；导航默认关闭，需先在实车验证地图/定位/move_base。媒体只做有界内存转发，照片/录像在浏览器内存预览；服务器不保存媒体文件或历史录像。
 
 **附近几米内的目标**：新增[3 米内相对目标与实时激光避障](docs/RELATIVE-NAVIGATION.md)，无需预存地图，用 `bash robot-bridge/start-scout.sh --relative` 启动；沿用当前终端运行方式，保留固定地图模式。此模式代码与本地测试不代表实车避障/到达已验收。

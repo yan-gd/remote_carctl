@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import type { ApiClient } from '../api/client';
 import type { NavigationStatus } from '../api/types';
 import { Card, ErrorNotice, StatusPill, errorMessage } from '../components/UI';
+import { MappingPanel } from '../mapping/MappingPanel';
 
 const REASONS: Record<string,string> = {
   NAVIGATION_DISABLED:'后端导航尚未启用',NO_LIVE_NAVIGATION_REPORT:'未收到新鲜导航报告',MAP_UNAVAILABLE:'没有可用的map地图',
   SENSOR_OR_COSTMAP_STALE:'雷达、底盘或局部代价地图数据缺失/过期',MOVE_BASE_UNAVAILABLE:'move_base没有启动',
   LOCALIZATION_UNAVAILABLE:'map → base_link定位不可用',DIRECT_CMD_VEL_PUBLISHER:'检测到其他节点直接控制底盘，请先隔离导航速度话题',
-  INITIAL_POSE_REQUIRED:'请在 RViz 为当前地图重新设置 2D Pose Estimate，并核对激光对齐',
+  INITIAL_POSE_REQUIRED:'请在地图工作台设置小车初始位置和朝向，并核对激光对齐',
+  WEB_MAPPING_ACTIVE:'正在建图，保存并加载地图后可导航',WEB_MAP_NOT_LOADED:'请先在地图工作台加载已保存地图',
   LEASE_EXPIRED:'云端续约中断，小车已取消导航',READY:'地图、定位与导航已就绪',
   NAVIGATION_CHECK_STALE:'导航环境检查超时，控制门已关闭',
   LIVE_GRID_UNAVAILABLE:'等待实时激光障碍地图，无需加载预存地图',
@@ -33,6 +35,7 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
   const [cycles,setCycles]=useState('1');
   const [busy,setBusy]=useState(false);
   const [notice,setNotice]=useState<string|null>(null);
+  const goalReference=useRef<string|null>(null);
   const alive=useRef(true);
   const canMove=role==='OPERATOR';
   const canStop=canMove||role==='MONITOR';
@@ -44,7 +47,8 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
   useEffect(()=>{
     // Coordinates from the other mode must never be reinterpreted as a new goal.
     setPoints([{x:'',y:'',yaw:'0'}]);setCycles('1');setNotice(null);
-  },[mode]);
+    goalReference.current=null;
+  },[mode,status?.robot?.mapId]);
 
   useEffect(()=>{
     alive.current=true;
@@ -74,6 +78,7 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
         throw new Error('相对目标直线距离必须在0.1至3米内，且只允许一个目标。');
       if(parsed.some(p=>Math.abs(p.yaw)>Math.PI))throw new Error('朝向必须在−π至π弧度内。');
       if(!status?.robot?.mapId)throw new Error('导航参考尚未就绪。');
+      if(goalReference.current&&goalReference.current!==status.robot.mapId)throw new Error('地图已经变化，请重新选择目标。');
       await api.startNavigation({mapId:status.robot.mapId,points:parsed,cycles:relative?1:Number(cycles)});
       if(!alive.current)return;
       setNotice(direct?'纯里程计目标已发给小车；无自动避障，必须在清空障碍的场地由现场人员监护。':relative?'相对目标已发给Broker，等待小车确认；开始时的位置和朝向会被固定，可切换摄像头查看。':'目标点已发给Broker，等待真实move_base反馈；可切换摄像头查看，巡逻由后端持续续约。');
@@ -97,6 +102,14 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
   return <div className={`stack navigation-page${relative?' is-relative':''}`}>
     {error&&<ErrorNotice message={error}/>}
     {notice&&<div className="notice notice-info">{notice}</div>}
+    {!relative&&<MappingPanel api={api} role={role} mission={mission} onReference={id=>{
+      if(goalReference.current&&goalReference.current!==id){goalReference.current=null;setPoints([{x:'',y:'',yaw:'0'}]);}
+    }} onGoal={(pose,id)=>{
+      if(id!==status?.robot?.mapId){setError('地图状态正在同步，请稍后重新选择。');return;}
+      goalReference.current=id;
+      const point={x:pose.x.toFixed(3),y:pose.y.toFixed(3),yaw:String(pose.yaw)};
+      setPoints(old=>old.length===1&&!old[0].x&&!old[0].y?[point]:old.length<30?[...old,point]:old);
+    }}/>}
     <Card title={direct?'附近目标 · 纯里程计（无避障）':relative?'附近目标 · 实时避障':'目标点导航 / 多点巡逻'} actions={<StatusPill tone={status?.ready?'ok':'warn'}>{mission?(relative?'正在前往目标':'自主巡逻中'):status?.ready?'导航就绪':'尚未就绪'}</StatusPill>}>
       <p className="muted">{reason}</p>
       {direct&&<p className="notice notice-error">此模式没有自动避障能力：可能撞到人或障碍物。仅在清空行驶路径、现场有人监护且能立即急停时使用。</p>}

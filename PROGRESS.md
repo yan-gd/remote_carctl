@@ -1,6 +1,6 @@
 # exp3 项目进度与 Agent 交接
 
-更新时间：2026-10-25（Asia/Singapore）。本文记录代码状态、用户提供的现场结果和后续工作边界，供后续 Agent 接续；不是完整测试报告。**第15节为最新自主巡逻/原生TF兼容/真实Broker验证；第14节保留首轮实现与硬件调查，前台续约设计已被15节替代；更早章节为历史。** 原有部署见 [README 的 Quick Start](README.md#3-quick-start服务器--小车端)，新增能力见 [NAVIGATION-CAMERA.md](docs/NAVIGATION-CAMERA.md)。
+更新时间：2026-10-26（Asia/Singapore）。本文记录代码状态、用户提供的现场结果和后续工作边界，供后续 Agent 接续；不是完整测试报告。**最新 Web 建图工作见第19节；第15节的后端续约设计取代第14节前台续约；早期“没有导航”等描述已过时。** 原有部署见 [README 的 Quick Start](README.md#3-quick-start服务器--小车端)，新增能力见 [NAVIGATION-CAMERA.md](docs/NAVIGATION-CAMERA.md)。
 
 ## 1. 接手时先知道这些
 
@@ -583,3 +583,15 @@ bash frontend/deploy/smoke-test.sh agilex.yoyoyan.cn
 - 服务器新增 `server/media/mediamtx.yml`、可选 systemd 单元和 `frontend/deploy/webrtc-relay.conf`。通过 RTSPS/TCP 8322 上传、WebRTC/UDP 8189 播放；WHEP HTTP 仅监听本地 8889 并由 Nginx `auth_request` 验证 Spring JWT。示例密钥占位符必须现场替换；不能直接公网开放 8889，也不能改写现有 SQLite、证书或 BT vhost。
 - 本地 `npm run typecheck`、`npm test`（33项，含 WHEP 会话更新和 JPEG 停帧重连）、JPEG 与 WebRTC 两种 `npm run build` 通过；Python 桥接82项通过（含本次 H.264 配置/队列新增2项），`bash -n` 通过。MediaMTX v1.21.2 可以解析新增配置，本地因不存在服务器 TLS 证书而未实际启动。**这些不代表 Xavier 上的 PyGObject/NVENC/RTSPS 或公网 WHEP/ICE 已验收。** 现场需要按部署文档依序验证证书、编码器、媒体端口、鉴权、FPS、断线恢复与既有 STOP。
 - 本次代码在工作区，未推送或部署。后续先检查 `git status`；不得提交运行密码或将实验目标FPS写成实测结果。
+
+## 19. 2026-10-26 Web 建图、地图定位与选点导航（本地实现）
+
+用户要求让小车建图后导航，并在 Web 查看地图及选点，不进入小车图形界面。已查阅用户提供的套装手册第30–35页，按「人工遥控采集 Gmapping → 保存 → 加载 map_server/AMCL/move_base → Web 初始位姿 → 地图选点」实现，不包含自主探索。
+
+- 新增 `docs/WEB-MAPPING.md`，含完整部署、接口、操作和现场验收说明。前端「导航」新增地图工作台，支持实时栅格、真实TF位姿、激光叠加、近期规划路径、缩放平移、拖动设置朝向、保存/加载、初始定位。选点只填入目标列表，需明确开始导航。
+- 新增 `MappingService` / `MappingController`：5个接口，JWT读取、OPERATOR写入、独立 `PATROL_MAPPING_DEVICE_KEY` 设备交换；有界地图内存缓存，设备会话绑定、10秒命令过期和回执，服务器不保存地图历史。API操作总数现在32。
+- 小车 `scout_mapping.py` 与 `start-scout.sh --web-map`：共享既有底盘/雷达，固定launch切换Gmapping或地图导航；保存标准PGM/YAML到小车专属目录，不覆盖旧地图、不接收任意路径。地图编码/上传、状态轮询与控制循环分开。切换前停车并检查真实静止，切换中拒绝运动但保留STOP。旧relative/direct模式保留。
+- 原生Python2 TF辅助进程增加真实激光投影，Python3仍不加载tf2原生扩展。地图导航补充完整costmap发布，适配既有健康新鲜度检查。没有新增npm/Maven/Python生产依赖，没有更改SQLite结构。
+- 本地验证：后端126项，0失败/0错误、1条件跳过（未设置MQTT_TEST_URL的真实Broker测试）；前端41项通过并可生产构建；桥接97项通过；Python3.7语法解析及启动脚本bash语法通过。后端打包成功。日志在忽略目录 `verification/web-map-*`。
+- 浏览器本地夹具跑通开始建图、保存、加载、初始位姿、选目标及导航提交；1440桌面、390手机布局已检查。修复原有桌面固定高度把地图卡片压缩隐藏的问题。截图明确使用LOCAL UI TEST账号与生成的测试地图，不能当作实车证据。
+- 当前工作基于 `2e14b24`，修改尚未提交、推送或部署。下一步按 `docs/WEB-MAPPING.md` 更新服务器后端/前端与小车、配置独立设备密钥，先验证真实地图和激光对齐，再由现场人员验收短距离到达、避障和STOP/断链停车。首次部署需终端，之后日常建图/选点可全Web；不要宣称无需任何小车端进程。

@@ -104,6 +104,23 @@ export interface PageResult<T> {
   size: number;
 }
 
+export interface MapPose { x: number; y: number; yaw: number }
+export interface MapGrid {
+  session: string; mapId: string; width: number; height: number; resolution: number;
+  originX: number; originY: number; originYaw: number; cells: string;
+}
+export interface MappingState {
+  online: boolean;
+  robot: null | {
+    session: string; mode: 'IDLE'|'MAPPING'|'NAVIGATION'|'ERROR'; busy: boolean;
+    mapId: string|null; maps: string[]; pose: MapPose|null;
+    scan: {x:number;y:number}[]; path: {x:number;y:number}[];
+    commandId: string|null; result: string|null; message: string|null;
+  };
+  pending: {id:string}|null; delivery: string|null;
+}
+export interface MapRequest { action: 'START'|'SAVE'|'LOAD'|'STOP'|'INITIAL_POSE'; name?:string; mapId?:string; pose?:MapPose }
+
 export interface RoutePoint {
   sequence: number;
   x: number;

@@ -33,6 +33,10 @@ public class SecurityConfiguration {
                 // Machine-only raw frame ingress validates a separate device key before reading bytes.
                 .antMatchers(HttpMethod.PUT, "/api/v1/device/camera/frame")
                 .permitAll()
+                .antMatchers(HttpMethod.PUT, "/api/v1/device/mapping/grid")
+                .permitAll()
+                .antMatchers(HttpMethod.POST, "/api/v1/device/mapping/exchange")
+                .permitAll()
                 .antMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
                 .permitAll()
                 .antMatchers(HttpMethod.GET, "/api/v1/**")

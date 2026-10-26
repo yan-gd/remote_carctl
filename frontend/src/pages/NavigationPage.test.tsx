@@ -8,7 +8,7 @@ const ready:NavigationStatus={enabled:true,ready:true,reason:'READY',active:fals
   robot:{ready:true,reason:'READY',frame:'map',mapId:'map-a',state:'IDLE',missionId:null,pointIndex:0,totalPoints:0,x:0,y:0,yaw:0}};
 function client() {
   return {navigationStatus:vi.fn(async():Promise<NavigationStatus>=>ready),startNavigation:vi.fn(async()=>({missionId:'mission-a',accepted:true,seq:1})),
-    cancelNavigation:vi.fn(async()=>({}))};
+    cancelNavigation:vi.fn(async()=>({})),mappingStatus:vi.fn(async()=>({online:false,robot:null,pending:null,delivery:null}))};
 }
 describe('autonomous navigation page',()=>{
   beforeEach(()=>vi.useFakeTimers());

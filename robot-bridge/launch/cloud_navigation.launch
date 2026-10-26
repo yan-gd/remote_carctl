@@ -37,6 +37,11 @@
     <param name="local_costmap/obstacles_laser/scan/topic" value="$(arg scan_topic)" />
     <param name="global_costmap/robot_base_frame" value="base_link" />
     <param name="local_costmap/robot_base_frame" value="base_link" />
+    <!-- The bridge checks full grid freshness, rather than costmap delta messages. -->
+    <param name="global_costmap/always_send_full_costmap" value="true" />
+    <param name="local_costmap/always_send_full_costmap" value="true" />
+    <param name="global_costmap/publish_frequency" value="2.0" />
+    <param name="local_costmap/publish_frequency" value="2.0" />
     <param name="global_costmap/inflation/inflation_radius" value="0.55" />
     <param name="local_costmap/inflation/inflation_radius" value="0.55" />
     <!-- Only the bridge may publish chassis /cmd_vel. -->

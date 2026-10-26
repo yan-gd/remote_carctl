@@ -63,3 +63,7 @@ python3 -m unittest discover -s tests -v
 本轮 65 项测试在本机 Python3.13 全部通过，并检查了生产脚本的 Python3.7 语法。覆盖原有命令映射、看门狗、STOP、断线、序号、遥测、ROS替身接线，另有导航租约/地图/健康状态/点位结果、视频解析和HTTP上传边界。历史版本曾在两套 Paho 环境通过，不能据此声称新增代码已在实际 Melodic 上运行。替身测试**不能代替实车运行**。
 
 与后端、Broker 一起的端到端验证见 `../scripts/e2e_sim.py`。
+
+## Web 建图入口
+
+需要在网页完成建图、保存地图、设置初始位置与选点导航时，使用 `start-scout.sh --web-map`，详细部署见 [Web 建图指南](../docs/WEB-MAPPING.md)。首次配置独立设备密钥；保留原 relative/direct 模式。当前未完成实车验收。

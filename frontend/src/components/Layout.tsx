@@ -21,7 +21,7 @@ const NAV: Array<{ id: Tab; label: string; description: string }> = [
     label: '控制',
     description: '查看车载画面，按住行驶，松开停止。',
   },
-  { id: 'navigation', label: '导航', description: '附近目标实时避障，或已有地图上的目标点导航。' },
+  { id: 'navigation', label: '导航', description: '在线建图、地图定位与选点导航，也可使用附近目标模式。' },
   { id: 'camera', label: '摄像头', description: '实时观看与拍摄，服务端仅转发、不保存。' },
   {
     id: 'alarms',

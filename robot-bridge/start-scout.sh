@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Foreground launcher for this Xavier: ROS1 Melodic + Conda Python 3.7.
-# Run as agilex: bash start-scout.sh [--no-camera] [--relative|--direct] [--webrtc]
+# Run as agilex: bash start-scout.sh [--no-camera] [--relative|--direct|--web-map] [--webrtc]
 set -eo pipefail
 
 SCOUT_DIR=/home/agilex/Desktop/remote_carctl/robot-bridge
@@ -10,6 +10,7 @@ SCOUT_CAMERA=1
 SCOUT_RELATIVE=0
 SCOUT_DIRECT=0
 SCOUT_WEBRTC=0
+SCOUT_WEB_MAP=0
 SCOUT_CLIENTS=()
 SCOUT_DRIVERS=()
 SCOUT_MEDIA=()
@@ -20,9 +21,13 @@ for SCOUT_ARG in "$@"; do
         --relative) SCOUT_RELATIVE=1 ;;
         --direct) SCOUT_RELATIVE=1; SCOUT_DIRECT=1 ;;
         --webrtc) SCOUT_WEBRTC=1 ;;
-        *) echo 'Usage: bash start-scout.sh [--no-camera] [--relative|--direct] [--webrtc]' >&2; exit 2 ;;
+        --web-map) SCOUT_WEB_MAP=1 ;;
+        *) echo 'Usage: bash start-scout.sh [--no-camera] [--relative|--direct|--web-map] [--webrtc]' >&2; exit 2 ;;
     esac
 done
+if (( SCOUT_WEB_MAP && SCOUT_RELATIVE )); then
+    echo '--web-map cannot be combined with --relative or --direct.' >&2; exit 2
+fi
 
 if [[ "$(id -un)" != agilex ]]; then
     echo 'Run as agilex, without sudo: bash start-scout.sh' >&2
@@ -39,7 +44,7 @@ source /home/agilex/catkin_ws/devel/setup.bash
 export ROS_MASTER_URI=http://localhost:11311
 export PYTHONUNBUFFERED=1
 cd "$SCOUT_DIR"
-if (( SCOUT_RELATIVE )); then
+if (( SCOUT_RELATIVE || SCOUT_WEB_MAP )); then
     # Validate dependencies before stopping any existing managed services.
     "$SCOUT_PY2" -c 'import tf2_ros'
     "$SCOUT_PY3" -c 'import actionlib; from move_base_msgs.msg import MoveBaseAction'
@@ -48,6 +53,13 @@ if (( SCOUT_RELATIVE )); then
             rospack find "$SCOUT_PACKAGE" >/dev/null
         done
     fi
+fi
+if (( SCOUT_WEB_MAP )); then
+    for SCOUT_PACKAGE in gmapping map_server amcl move_base scout_description rslidar_sdk pointcloud_to_laserscan; do
+        rospack find "$SCOUT_PACKAGE" >/dev/null
+    done
+    SCOUT_MAP_ENV="$HOME/.config/remote-carctl/mapping.env"
+    test -r "$SCOUT_MAP_ENV"
 fi
 
 sudo -v
@@ -88,7 +100,9 @@ scout_cleanup() {
         kill -TERM "$SCOUT_PID" 2>/dev/null || true
     done
     # A client stuck inside rospy.init_node may not respond to its own handler.
-    for (( SCOUT_N=0; SCOUT_N<30; SCOUT_N++ )); do
+    SCOUT_CLEANUP_TICKS=30
+    if (( SCOUT_WEB_MAP )); then SCOUT_CLEANUP_TICKS=150; fi
+    for (( SCOUT_N=0; SCOUT_N<SCOUT_CLEANUP_TICKS; SCOUT_N++ )); do
         SCOUT_ALIVE=0
         for SCOUT_PID in "${SCOUT_MEDIA[@]}" "${SCOUT_CLIENTS[@]}"; do
             if kill -0 "$SCOUT_PID" 2>/dev/null; then SCOUT_ALIVE=1; fi
@@ -138,6 +152,11 @@ until timeout -k 1s 3s "$SCOUT_PY2" /opt/ros/melodic/bin/rosnode list >/dev/null
 done
 
 SCOUT_BRIDGE_ARGS=()
+if (( SCOUT_WEB_MAP )); then
+    env -u PATROL_CAMERA_DEVICE_KEY "$SCOUT_PY2" /opt/ros/melodic/bin/roslaunch "$SCOUT_DIR/launch/cloud_sensors.launch" &
+    SCOUT_DRIVERS+=("$!")
+    SCOUT_BRIDGE_ARGS+=(--web-map)
+fi
 if (( SCOUT_RELATIVE )); then
     if (( ! SCOUT_DIRECT )); then
         env -u PATROL_CAMERA_DEVICE_KEY "$SCOUT_PY2" /opt/ros/melodic/bin/roslaunch "$SCOUT_DIR/launch/cloud_sensors.launch" &
@@ -149,7 +168,16 @@ if (( SCOUT_RELATIVE )); then
     if (( SCOUT_DIRECT )); then SCOUT_BRIDGE_ARGS+=(--navigation-direct); fi
 fi
 
-"$SCOUT_PY3" -u scout_mqtt_bridge.py --ros 1 --config config.yaml "${SCOUT_BRIDGE_ARGS[@]}" &
+(
+    if (( SCOUT_WEB_MAP )); then
+        set -a
+        source "$SCOUT_MAP_ENV"
+        set +a
+        : "${MAPPING_SERVER:?Missing MAPPING_SERVER}"
+        : "${PATROL_MAPPING_DEVICE_KEY:?Missing mapping device key}"
+    fi
+    exec "$SCOUT_PY3" -u scout_mqtt_bridge.py --ros 1 --config config.yaml "${SCOUT_BRIDGE_ARGS[@]}"
+) &
 SCOUT_CLIENTS+=("$!")
 
 if (( SCOUT_CAMERA )); then

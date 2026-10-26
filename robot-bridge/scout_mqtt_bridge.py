@@ -250,6 +250,7 @@ def parse_args(argv):
     parser.add_argument("--port", type=int, help="overrides mqtt.port")
     parser.add_argument("--navigation-mode", choices=("map", "relative"), help="explicitly enable the selected navigation mode")
     parser.add_argument("--navigation-direct", action="store_true", help="opt in to odometry-only relative goals without obstacle avoidance")
+    parser.add_argument("--web-map", action="store_true", help="enable headless Web mapping and saved-map navigation")
     parser.add_argument("--log-level", default="INFO", choices=("DEBUG", "INFO", "WARNING", "ERROR"))
     return parser.parse_args(argv)
 
@@ -267,6 +268,11 @@ def build_config(args):
     if getattr(args, 'navigation_direct', False):
         overrides.setdefault('navigation', {})
         overrides['navigation']['direct'] = True
+    if getattr(args, 'web_map', False):
+        if getattr(args, 'navigation_direct', False) or getattr(args, 'navigation_mode', None) == 'relative':
+            raise ConfigError('--web-map cannot be combined with relative/direct navigation')
+        overrides.setdefault('navigation', {}).update(enabled=True, mode='map', direct=False,
+                                                       frame='map', map_topic='/map')
     for key, value in (("host", args.host), ("port", args.port)):
         if value is not None:
             overrides.setdefault("mqtt", {})
@@ -280,7 +286,12 @@ def main(argv=None):
     try:
         config = build_config(args)
         kind = detect_ros() if args.ros == "auto" else args.ros
-    except ConfigError as error:
+        if args.web_map:
+            from scout_mapping import validate_settings
+            validate_settings(os.environ.get('MAPPING_SERVER', ''), os.environ.get('PATROL_MAPPING_DEVICE_KEY', ''))
+            if kind != '1':
+                raise ConfigError('Web mapping requires ROS1')
+    except (ConfigError, ValueError) as error:
         LOG.error("%s", error)
         return 2
 
@@ -290,6 +301,11 @@ def main(argv=None):
     if config['navigation']['enabled']:
         from scout_navigation import build_navigation
         core.navigation = build_navigation(config['navigation'], adapter, telemetry, core._send)
+    if args.web_map:
+        from scout_mapping import WebMapping
+        core.web_mapping = WebMapping(core, core.navigation.adapter,
+            os.environ.get('MAPPING_SERVER', ''), os.environ.get('PATROL_MAPPING_DEVICE_KEY', ''),
+            os.environ.get('SCOUT_MAP_DIR', os.path.expanduser('~/.local/share/remote-carctl/maps')))
     link = MqttLink(config["mqtt"], config["robot_id"], core.on_connected, core.on_disconnected, core.on_control)
     link.navigation_handler = core.on_navigation
     core.bind(link)
@@ -310,6 +326,8 @@ def main(argv=None):
         config["safety"]["watchdog_timeout"],
     )
     link.start()
+    if core.web_mapping:
+        core.web_mapping.start()
     period = 1.0 / config["safety"]["publish_rate"]
     spin = getattr(adapter, "spin_once", None)
     try:

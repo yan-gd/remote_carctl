@@ -449,8 +449,8 @@ class ApiIntegrationTest {
                 operations++;
             }
         }
-        // 20 existing operations + 3 navigation + 4 transient camera operations.
-        assertEquals(27, operations);
+        // 20 existing + 3 navigation + 4 camera + 5 Web mapping operations.
+        assertEquals(32, operations);
         assertTrue(
                 doc.path("paths")
                         .path("/api/v1/robot/control")

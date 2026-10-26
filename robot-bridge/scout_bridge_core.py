@@ -348,6 +348,7 @@ class BridgeCore(object):
         self._link_down_since = None
         self._next_link_warning = None
         self.navigation = None
+        self.web_mapping = None
         self._command_lock = threading.RLock()
         self._shutting_down = False
 
@@ -399,6 +400,9 @@ class BridgeCore(object):
         if not self.sequence.accept(session, seq):
             LOG.debug("dropping duplicate or out-of-order control seq=%s", seq)
             return
+        if self.web_mapping and self.web_mapping.busy and command != 'STOP':
+            self._ack(seq, session, command, 'REJECTED', 'MAP_OPERATION_IN_PROGRESS')
+            return
         if self.navigation:
             self.navigation.cancel('MANUAL_OVERRIDE')
         self._send(*self.motion.apply(command))
@@ -439,6 +443,9 @@ class BridgeCore(object):
             return
         if not self.sequence.accept(session, seq):
             return
+        if self.web_mapping and (self.web_mapping.busy or self.web_mapping.mode != 'NAVIGATION'):
+            self.navigation.cancel('WEB_MAP_NOT_NAVIGATING')
+            return
         self.motion.halt()
         self.navigation.command(message)
 
@@ -452,6 +459,8 @@ class BridgeCore(object):
                 self._send(0.0, 0.0)
         if self.navigation:
             self.navigation.shutdown()
+        if self.web_mapping:
+            self.web_mapping.close()
         payload = {"robot_id": self.robot_id, "online": False, "reason": "SHUTDOWN", "timestamp": self._now_ms()}
         if self._link is not None and self._link.connected:
             self._link.publish(self.topics["heartbeat"], _dumps(payload), 1, wait=1.0)

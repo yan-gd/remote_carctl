@@ -31,6 +31,8 @@ public class OpenApiConfiguration {
                                                 .scheme("bearer")
                                                 .bearerFormat("JWT"))
                                 .addSecuritySchemes("cameraDeviceKey", new SecurityScheme()
+                                        .type(SecurityScheme.Type.APIKEY).in(SecurityScheme.In.HEADER).name("X-Device-Key"))
+                                .addSecuritySchemes("mappingDeviceKey", new SecurityScheme()
                                         .type(SecurityScheme.Type.APIKEY).in(SecurityScheme.In.HEADER).name("X-Device-Key")))
                 .addSecurityItem(new SecurityRequirement().addList("bearerAuth"));
     }
