@@ -35,7 +35,7 @@ describe('Web mapping operations',()=>{
   });
   it('viewers cannot mutate mapping or stage destinations',async()=>{
     const api=client();render(<MappingPanel api={api as unknown as ApiClient} role="VIEWER" mission={false} onGoal={()=>{}} onReference={()=>{}}/>);
-    await act(async()=>{});expect(screen.getByText('开始新建地图')).toBeDisabled();expect(screen.getByText('测试地图选点')).toBeDisabled();
+    await act(async()=>{});expect(screen.queryByText('开始新建地图')).not.toBeInTheDocument();expect(screen.getByText('测试地图选点')).toBeDisabled();
     expect(api.mapCommand).not.toHaveBeenCalled();
   });
   it('a lost link clears selected coordinates and disables mutations',async()=>{

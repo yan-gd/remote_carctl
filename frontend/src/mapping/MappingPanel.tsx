@@ -4,6 +4,7 @@ import type { MapGrid, MappingState, MapPose, MapRequest, NavigationStatus } fro
 import { Card, ErrorNotice, StatusPill, errorMessage } from '../components/UI';
 import { useHoldControl } from '../control/useHoldControl';
 import { MapCanvas } from './MapCanvas';
+import { permissions } from '../auth/permissions';
 
 const MODES={IDLE:'等待建图或加载地图',MAPPING:'正在建图',NAVIGATION:'已加载导航地图',ERROR:'地图进程异常'};
 const MESSAGES:Record<string,string>={
@@ -33,7 +34,7 @@ export function MappingPanel({api,role,mission,onGoal,onNavigate,onReference,nav
   const [notice,setNotice]=useState<string|null>(null);
   const [pressed,setPressed]=useState<string|null>(null);
   const alive=useRef(true),reference=useRef(onReference);reference.current=onReference;
-  const canMove=role==='OPERATOR',canStop=canMove||role==='MONITOR';
+  const {move:canMove,stop:canStop}=permissions(role);
   const live=!!state?.online,robot=state?.robot;
   const busy=sending||navigationBusy||!!robot?.busy||!!state?.pending;
   const controller=useHoldControl(api,e=>{setPressed(null);setError(errorMessage(e));});
@@ -118,7 +119,7 @@ export function MappingPanel({api,role,mission,onGoal,onNavigate,onReference,nav
     {feedback&&<p className={`notice ${robot?.result==='FAILED'?'notice-error':'notice-info'}`}>{feedback}</p>}
     {state?.delivery==='EXPIRED'&&<p className="notice notice-error">操作未在有效期内送达，请确认小车在线后重试。</p>}
     {notice&&<p className="fine-print">{notice}</p>}
-    <div className="mapping-controls">
+    {canMove&&<div className="mapping-controls">
       <button className="button primary" disabled={!canMove||!live||busy||mission||mapping} onClick={()=>void command({action:'START'})}>开始新建地图</button>
       <label>新地图名称<input aria-label="新地图名称" placeholder="例如 lab-floor1" maxLength={40} value={name} disabled={!canMove||busy} onChange={e=>setName(e.target.value)}/></label>
       <button className="button" disabled={!canMove||!mapping||busy||!robot?.mapId||!/^[-\w]{1,40}$/.test(name)} onClick={()=>void command({action:'SAVE',name})}>保存地图</button>
@@ -127,9 +128,9 @@ export function MappingPanel({api,role,mission,onGoal,onNavigate,onReference,nav
       </select></label>
       <button className="button" disabled={!canMove||!live||busy||mission||!saved||!robot?.maps.includes(saved)} onClick={()=>void command({action:'LOAD',name:saved})}>加载地图导航</button>
       <button className="button" disabled={!canMove||!live||busy||mission||robot?.mode==='IDLE'} onClick={()=>void command({action:'STOP'})}>结束地图作业</button>
-    </div>
+    </div>}
     {!live&&<p className="notice notice-info">等待小车连接 Web 建图服务。连接后，可在这里完成建图与导航，无需打开小车图形界面。</p>}
-    {mapping&&<div className="mapping-drive">
+    {mapping&&canMove&&<div className="mapping-drive">
       <span>按住遥控采集地图，松开即停止。请缓慢绕行并回到起点附近。</span>
       {(['LEFT','FORWARD','BACKWARD','RIGHT'] as const).map((value,i)=><button key={value} className={`button ${pressed===value?'primary':''}`}
         disabled={!canMove||busy} aria-label={`建图${['左转','前进','后退','右转'][i]}`}
@@ -143,18 +144,18 @@ export function MappingPanel({api,role,mission,onGoal,onNavigate,onReference,nav
       {sameMap&&['CANCELLED','ABORTED','REJECTED'].includes(navigation?.robot?.state??'')&&
         <p className="notice notice-error">上次导航已停止：{navigationReason}</p>}
       {robot?.mode==='NAVIGATION'&&<div className="notice notice-info" role="status">
-        {mission?'正在执行导航，可使用“取消导航并停止”结束任务。':needsInitial?
+        {!canMove?(mission?'小车正在执行导航，可查看地图、激光与路径。':'地图只读：由远程巡检操作员完成定位与选点导航。'):mission?'正在执行导航，可使用“取消导航并停止”结束任务。':needsInitial?
           '先定位小车：请在地图上点击小车当前实际所在的位置，朝车头方向拖动，再点击“确认小车初始位置”。这一步完成后才能选择目的地。':
           ready?'导航已就绪：核对橙色激光与地图轮廓对齐后，选择目的地并点击“前往此处”。':
           `暂不能出发：${sameMap?navigationReason:'地图与导航状态正在同步，请稍候。'}`}
-        {!needsInitial&&!ready&&!mission&&<button className="button" disabled={!canMove||busy} onClick={()=>setPick('initial')}>重新设置小车位置</button>}
+        {!needsInitial&&!ready&&!mission&&canMove&&<button className="button" disabled={busy} onClick={()=>setPick('initial')}>重新设置小车位置</button>}
       </div>}
-      <div className="mapping-controls">
+      {canMove&&<div className="mapping-controls">
         <label>地图操作<select aria-label="地图操作" value={pick} onChange={e=>setPick(e.target.value as 'goal'|'initial'|'patrol')} disabled={!canMove||busy||mission}>
           <option value="goal">前往地图目标</option><option value="initial">设置小车初始位置</option><option value="patrol">编辑多点巡逻</option>
         </select></label>
         <span>{mapping?'地图正在更新，建图完成并加载后可选点。':pick==='initial'?'在小车实际位置按下，再沿车头方向拖动。':'在目标位置按下，拖动指定到达时的朝向。'}</span>
-      </div>
+      </div>}
       <MapCanvas grid={grid} pose={robot?.pose??null} scan={robot?.scan??[]} path={robot?.path??[]} selected={selection?.mapId===grid.mapId?selection.pose:null}
         disabled={!canPick} onError={setError} onSelect={pose=>{setError(null);setSelection({pose,mapId:grid.mapId});}}/>
       {selection&&<div className="mapping-controls">

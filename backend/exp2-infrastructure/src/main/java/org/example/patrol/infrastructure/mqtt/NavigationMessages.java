@@ -29,10 +29,16 @@ final class NavigationMessages {
             if (!Set.of("map", "relative").contains(mode == null ? "" : mode)) return null;
             if ("relative".equals(mode) && !"odom".equals(text(n, "frame"))) return null;
             if ((map != null && map.length() > 128) || (mission != null && mission.length() > 64)) return null;
+            JsonNode obstacle = n.path("obstacle_detected");
+            if (!obstacle.isMissingNode() && !obstacle.isNull() && !obstacle.isBoolean()) return null;
+            Boolean detected = obstacle.isBoolean() ? obstacle.asBoolean() : null;
+            Double distance = number(n, "obstacle_distance");
+            if (Boolean.TRUE.equals(detected) && (distance == null || distance <= 0 || distance > 0.8)) return null;
+            if (!Boolean.TRUE.equals(detected)) distance = null;
             return new NavigationReport(robotId, n.path("ready").asBoolean(), text(n, "reason"), map,
                     text(n, "frame"), n.path("state").asText(), mission,
                     n.path("point_index").asInt(), n.path("total_points").asInt(),
-                    number(n, "x"), number(n, "y"), number(n, "yaw"), mode);
+                    number(n, "x"), number(n, "y"), number(n, "yaw"), mode, detected, distance);
         } catch (Exception e) { return null; }
     }
 

@@ -280,6 +280,33 @@ class RobotApiTest {
     }
 
     @Test
+    void navigationObstacleIsPersistedVisibleAndAcknowledgedOnlyByMonitor() throws Exception {
+        String viewer = token(Role.VIEWER), operator = token(Role.OPERATOR), watcher = token(Role.MONITOR);
+        String sql = "SELECT count(*) FROM alarm_record WHERE source='SCOUT-001:NAV_OBSTACLE'";
+        long before = count(sql);
+        var report = new NavigationReport("SCOUT-001", true, "READY", "test-map", "map", "ACTIVE",
+                "obstacle-integration", 1, 1, 0.0, 0.0, 0.0, "map", true, 0.45);
+        online();
+        monitor.onNavigation(report);
+        Thread.sleep(550);
+        online();
+        monitor.onNavigation(report);
+        monitor.onNavigation(report);
+        assertEquals(before + 1, count(sql));
+        long id = jdbc.queryForObject("SELECT max(id) FROM alarm_record WHERE source='SCOUT-001:NAV_OBSTACLE'", Long.class);
+        var detail = call(get("/api/v1/alarms/" + id), null, viewer, 200).path("data");
+        assertEquals("UNACKNOWLEDGED", detail.path("status").asText());
+        assertTrue(detail.path("description").asText().contains("0.45"));
+        call(patch("/api/v1/alarms/" + id + "/ack"), null, operator, 403);
+        call(patch("/api/v1/alarms/" + id + "/ack"), null, watcher, 200);
+        var acknowledged = call(get("/api/v1/alarms/" + id), null, viewer, 200).path("data");
+        assertEquals("ACKNOWLEDGED", acknowledged.path("status").asText());
+        assertTrue(acknowledged.path("acknowledgedBy").asLong() > 0);
+        assertFalse(acknowledged.path("acknowledgedAt").isNull());
+        assertEquals(before + 1, count(sql));
+    }
+
+    @Test
     void heartbeatLossRaisesOneAlarmAndBlocksMotion() throws Exception {
         String sql = "SELECT count(*) FROM alarm_record WHERE source='SCOUT-001' AND title='小车离线'";
         offline();

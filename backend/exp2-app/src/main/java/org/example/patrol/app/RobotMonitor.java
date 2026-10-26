@@ -42,11 +42,55 @@ public class RobotMonitor implements RobotListener {
     private boolean batteryLow;
     private NavigationReport navigation;
     private Instant navigationAt;
+    private String obstacleMission;
+    private Instant obstacleSince, obstacleClearSince;
+    private boolean obstacleRaised;
+    private final Set<String> failedMissions = new LinkedHashSet<>();
 
     @Override
-    public synchronized void onNavigation(NavigationReport report) {
+    public void onNavigation(NavigationReport report) {
+        raise(navigationAlarms(report));
+    }
+
+    private synchronized List<Alarm> navigationAlarms(NavigationReport report) {
+        var raised = new ArrayList<Alarm>();
+        Instant now = clock.instant();
+        boolean gap = navigationAt == null || now.isAfter(navigationAt.plus(settings.heartbeatTimeout()));
         navigation = report;
-        navigationAt = clock.instant();
+        navigationAt = now;
+        if (report.missionId() == null || !isOnline(now)) return raised;
+        if (!Objects.equals(obstacleMission, report.missionId())) {
+            obstacleMission = report.missionId(); obstacleRaised = false;
+            obstacleSince = obstacleClearSince = null;
+        }
+        if (gap) { obstacleSince = obstacleClearSince = null; }
+        if ("ACTIVE".equals(report.state())) {
+            if (Boolean.TRUE.equals(report.obstacleDetected()) && report.obstacleDistance()!=null) {
+                obstacleClearSince = null;
+                if (obstacleSince == null) obstacleSince = now;
+                if (!obstacleRaised && !now.isBefore(obstacleSince.plusMillis(500))) {
+                    obstacleRaised = true;
+                    raised.add(alarm("导航前方检测到近距离障碍",
+                            String.format(Locale.ROOT,"任务 %s；激光检测到车体前方0.8m、左右各0.35m范围内的回波，最近前向距离%.2fm。请核对现场和实时画面；此告警不代表碰撞，规划器负责避障。",
+                                    report.missionId(), report.obstacleDistance()),
+                            AlarmLevel.WARNING, settings.id()+":NAV_OBSTACLE"));
+                }
+            } else if (Boolean.FALSE.equals(report.obstacleDetected())) {
+                obstacleSince = null;
+                if (obstacleClearSince == null) obstacleClearSince = now;
+                if (!now.isBefore(obstacleClearSince.plusSeconds(2))) obstacleRaised = false;
+            } else { obstacleSince = obstacleClearSince = null; }
+        } else { obstacleSince = obstacleClearSince = null; }
+        String reason = report.reason();
+        boolean failure = "ABORTED".equals(report.state()) || "REJECTED".equals(report.state())
+                || ("CANCELLED".equals(report.state()) && Set.of("NAVIGATION_NO_PROGRESS", "NAVIGATION_SPIN_LIMIT",
+                "NAVIGATION_HEALTH_LOST", "NAVIGATION_ODOMETRY_UNAVAILABLE", "GOAL_TIMEOUT", "LEASE_EXPIRED").contains(Objects.requireNonNullElse(reason,"")));
+        if (failure && failedMissions.add(report.missionId())) {
+            if (failedMissions.size()>128) failedMissions.remove(failedMissions.iterator().next());
+            raised.add(alarm("导航异常停止", "任务 "+report.missionId()+"；状态 "+report.state()+"；原因 "+reason
+                    +"。请核对定位、传感器和通路；导航失败不等于检测到障碍。", AlarmLevel.WARNING, settings.id()+":NAVIGATION"));
+        }
+        return raised;
     }
 
     public synchronized NavigationReport navigation() {

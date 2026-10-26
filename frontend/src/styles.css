@@ -2817,6 +2817,9 @@ td:first-child {
 /* Web map workbench */
 .mapping-controls, .mapping-drive, .map-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:14px 0; }
 .mapping-controls label { display:grid; gap:5px; font-size:13px; }
+.history-filters label { flex:0 1 220px; min-width:0; }
+.history-filters input { width:100%; min-width:0; }
+@media(max-width:600px) { .mapping-controls.history-filters label { flex-basis:100%; } }
 .mapping-controls input, .mapping-controls select { max-width:220px; min-height:38px; }
 .mapping-controls span, .map-toolbar span, .mapping-drive span { font-size:13px; color:var(--text-muted, #71808a); }
 .mapping-drive { padding:14px; border:1px solid var(--border, #d4dee1); border-radius:12px; }

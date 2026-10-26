@@ -9,6 +9,16 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class NavigationMessagesTest {
+    @Test void optionalLaserEvidenceIsValidatedWithoutBreakingOlderBridges() {
+        String base="{\"robot_id\":\"SCOUT-001\",\"ready\":true,\"state\":\"ACTIVE\"";
+        var old=NavigationMessages.report((base+"}").getBytes(StandardCharsets.UTF_8),"SCOUT-001");
+        assertNotNull(old);assertNull(old.obstacleDetected());
+        var hit=NavigationMessages.report((base+",\"obstacle_detected\":true,\"obstacle_distance\":0.5}").getBytes(StandardCharsets.UTF_8),"SCOUT-001");
+        assertNotNull(hit);assertTrue(hit.obstacleDetected());assertEquals(.5,hit.obstacleDistance());
+        for(String suffix:List.of(",\"obstacle_detected\":\"true\"}",",\"obstacle_detected\":true}",
+                ",\"obstacle_detected\":true,\"obstacle_distance\":-1}",",\"obstacle_detected\":true,\"obstacle_distance\":5}"))
+            assertNull(NavigationMessages.report((base+suffix).getBytes(StandardCharsets.UTF_8),"SCOUT-001"));
+    }
     @Test void wireOrderHasBoundedExpiryAndSharedSessionSequence() throws Exception {
         var now=Instant.ofEpochMilli(1000);
         var order=new NavigationOrder("START","mission","map-id",List.of(new NavigationOrder.Point(1,2,0)),2);

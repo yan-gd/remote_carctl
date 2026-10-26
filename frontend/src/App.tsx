@@ -8,7 +8,7 @@ import { errorMessage } from './components/UI';
 import { AlarmsPage } from './pages/AlarmsPage';
 import { ControlPage } from './pages/ControlPage';
 import { DashboardPage } from './pages/DashboardPage';
-import { InspectionPage } from './pages/InspectionPage';
+import { permissions } from './auth/permissions';
 import { LoginPage } from './pages/LoginPage';
 import { LogsPage } from './pages/LogsPage';
 import { CameraPage } from './pages/CameraPage';
@@ -46,7 +46,7 @@ export default function App() {
     try {
       const result = await api.login(username, password);
       setUser(result.user);
-      setTab('dashboard');
+      setTab(result.user.role==='MONITOR'?'alarms':'dashboard');
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -58,7 +58,7 @@ export default function App() {
     // Best-effort STOP before the token is discarded; the robot watchdog is the
     // fallback if the network is already gone.
     try {
-      await api.control('STOP');
+      if(user&&permissions(user.role).stop)await api.control('STOP');
     } catch {
       // Ignore: logout must still clear the local session.
     }
@@ -93,6 +93,7 @@ export default function App() {
     content = (
       <RobotProvider api={api}>
         <Shell
+          api={api}
           username={user.username}
           role={user.role}
           active={tab}
@@ -103,10 +104,9 @@ export default function App() {
           {tab === 'dashboard' && <DashboardPage />}
           {tab === 'camera' && <CameraPage api={api} />}
           {tab === 'navigation' && <NavigationPage api={api} role={user.role} />}
-          {tab === 'inspection' && <InspectionPage api={api} role={user.role} />}
-          {tab === 'control' && <ControlPage api={api} role={user.role} />}
+          {tab === 'control' && permissions(user.role).move && <ControlPage api={api} role={user.role} />}
           {tab === 'alarms' && <AlarmsPage api={api} role={user.role} />}
-          {tab === 'logs' && <LogsPage api={api} />}
+          {tab === 'logs' && <LogsPage api={api} role={user.role} />}
         </Shell>
       </RobotProvider>
     );

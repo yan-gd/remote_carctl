@@ -2,19 +2,16 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { errorMessage } from './UI';
 import { useRobot } from '../robot/RobotContext';
 import { formatRelative, roleLabel } from '../utils/format';
+import { permissions, roleDescription } from '../auth/permissions';
+import type { ApiClient } from '../api/client';
 
-export type Tab = 'dashboard' | 'inspection' | 'control' | 'alarms' | 'logs' | 'camera' | 'navigation';
+export type Tab = 'dashboard' | 'control' | 'alarms' | 'logs' | 'camera' | 'navigation';
 
 const NAV: Array<{ id: Tab; label: string; description: string }> = [
   {
     id: 'dashboard',
     label: '总览',
     description: '机器人实时遥测与最近执行回执。',
-  },
-  {
-    id: 'inspection',
-    label: '巡检',
-    description: '维护路线与任务计划，数据不会自动下发。',
   },
   {
     id: 'control',
@@ -26,7 +23,7 @@ const NAV: Array<{ id: Tab; label: string; description: string }> = [
   {
     id: 'alarms',
     label: '告警',
-    description: '查看机器人心跳、遥测与底盘告警。',
+    description: '查看设备与导航告警，按权限确认并追溯处理记录。',
   },
   {
     id: 'logs',
@@ -53,6 +50,7 @@ export function Shell({
   onLogout,
   onStop,
   children,
+  api,
 }: {
   username: string;
   role: string;
@@ -61,6 +59,7 @@ export function Shell({
   onLogout: () => Promise<void>;
   onStop: () => Promise<void>;
   children: ReactNode;
+  api?: ApiClient;
 }) {
   const { status, info, error, updatedAt } = useRobot();
   const [loggingOut, setLoggingOut] = useState(false);
@@ -68,6 +67,23 @@ export function Shell({
   const [stopNotice, setStopNotice] = useState<{failed:boolean;message:string}|null>(null);
   const online = status?.online ?? info?.online ?? false;
   const current = NAV.find((item) => item.id === active) ?? NAV[0];
+  const access = permissions(role);
+  const [unread, setUnread] = useState<number|null>(null);
+  const [alarmError,setAlarmError] = useState(false);
+
+  useEffect(()=>{
+    if(!api)return;
+    let disposed=false,inFlight=false;
+    const refresh=async()=>{
+      if(inFlight)return;inFlight=true;
+      try{const result=await api.alarms({page:1,size:1,status:'UNACKNOWLEDGED'});
+        if(!disposed){setUnread(result.total);setAlarmError(false);}}
+      catch{if(!disposed){setUnread(null);setAlarmError(true);}}
+      finally{inFlight=false;}
+    };
+    void refresh();const timer=window.setInterval(()=>void refresh(),3000);
+    return()=>{disposed=true;window.clearInterval(timer);};
+  },[api]);
 
   useEffect(() => {
     if (!stopNotice) return;
@@ -105,7 +121,7 @@ export function Shell({
         </div>
 
         <nav className="nav" aria-label="主导航">
-          {NAV.map((item) => (
+          {NAV.filter(item=>item.id!=='control'||access.move).map((item) => (
             <button
               key={item.id}
               type="button"
@@ -114,7 +130,7 @@ export function Shell({
               aria-current={active === item.id ? 'page' : undefined}
               title={item.description}
             >
-              {item.label}
+              {item.label}{item.id==='alarms'&&unread!==null&&unread>0?` (${unread})`:''}
             </button>
           ))}
         </nav>
@@ -136,6 +152,7 @@ export function Shell({
             <div className="user-meta">
               <strong>{username}</strong>
               <span>{roleLabel(role)}</span>
+              <span className="fine-print">{roleDescription(role)}</span>
             </div>
             <button
               type="button"
@@ -156,7 +173,7 @@ export function Shell({
             <p>{current.description}</p>
           </div>
           <div className="topbar-meta">
-            {(role === 'OPERATOR' || role === 'MONITOR') && <button type="button"
+            {access.stop && <button type="button"
               className="button danger small" disabled={stopping} onClick={() => void stop()}>
               {stopping ? '正在发送…' : '立即停止'}</button>}
             {error && <span className="text-warn">状态刷新异常</span>}
@@ -170,6 +187,11 @@ export function Shell({
         {stopNotice && <div role={stopNotice.failed ? 'alert' : 'status'}
           className={`global-control-notice notice ${stopNotice.failed ? 'notice-error' : 'notice-info'}`}>
           {stopNotice.message}</div>}
+        {active!=='alarms'&&(alarmError||(unread!==null&&unread>0))&&<div className="global-control-notice notice notice-info">
+          <button className="button small" onClick={()=>onNavigate('alarms')}>
+            {alarmError?'告警同步异常，打开告警页重试':`${unread} 条告警待确认 · 查看告警`}
+          </button>
+        </div>}
         <main className="content">{children}</main>
       </div>
     </div>

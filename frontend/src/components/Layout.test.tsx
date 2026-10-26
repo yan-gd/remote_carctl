@@ -5,6 +5,13 @@ import { Shell } from './Layout';
 vi.mock('../robot/RobotContext',()=>({useRobot:()=>({status:null,info:null,error:null,updatedAt:null})}));
 afterEach(cleanup);
 describe('global robot stop',()=>{
+  it.each(['OPERATOR','MONITOR','MAINTAINER','VIEWER'])('shows only authorized entries for %s and removes inspection',role=>{
+    render(<Shell username="test" role={role} active="dashboard" onNavigate={()=>{}} onLogout={async()=>{}} onStop={async()=>{}}>Content</Shell>);
+    expect(screen.queryByRole('button',{name:'巡检'})).not.toBeInTheDocument();
+    expect(!!screen.queryByRole('button',{name:'控制'})).toBe(role==='OPERATOR');
+    expect(!!screen.queryByRole('button',{name:'立即停止'})).toBe(['OPERATOR','MONITOR'].includes(role));
+    expect(screen.getByRole('button',{name:'告警'})).toBeInTheDocument();
+  });
   it('remains available on the camera page, including when status is offline',async()=>{
     const stop=vi.fn(async()=>undefined);
     render(<Shell username="operator" role="OPERATOR" active="camera" onNavigate={()=>undefined}

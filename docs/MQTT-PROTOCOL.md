@@ -145,6 +145,10 @@
 
 ## 4. 手工调试
 
+### 导航状态的可选障碍字段
+
+既有 `robot/{id}/navigation/status` 可增加 `obstacle_detected`（boolean 或 null）及 `obstacle_distance`（米，数字或 null）。仅激光导航 ACTIVE 时评估，`true` 要求有限的 `0 < obstacle_distance <= 0.8`，表示车体前向距离。`false` 表示有效观测没有满足近距离回波条件；`null` 或字段缺失表示未知，不触发清除。旧桥接无此字段仍兼容。消息不 retained，后端按真实在线心跳、任务、持续时间去重并将事件写入告警表，具体范围与处理规则见 [角色与告警说明](ROLES-ALARMS.md)。
+
 ```bash
 # 观察全部机器人消息
 mosquitto_sub -h <broker> -t 'robot/SCOUT-001/#' -v

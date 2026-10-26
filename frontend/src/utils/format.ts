@@ -48,10 +48,10 @@ export function motionLabel(state: string): string {
 
 export function roleLabel(role: string): string {
   const labels: Record<string, string> = {
-    OPERATOR: '操作员',
-    MONITOR: '监控员',
-    MAINTAINER: '维护员',
-    VIEWER: '观察员',
+    OPERATOR: '远程巡检操作员',
+    MONITOR: '安全监控值班员',
+    MAINTAINER: '现场设备运维员',
+    VIEWER: '业务查看人员',
   };
   return labels[role] ?? role;
 }

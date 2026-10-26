@@ -18,7 +18,7 @@ import javax.validation.constraints.Positive;
 @RestController
 @Validated
 @RequestMapping("/api/v1/alarms")
-@Tag(name = "告警管理", description = "演示数据标记为DEMO_FIXTURE，未连接真实设备")
+@Tag(name = "告警管理", description = "真实设备与导航告警持久化；仅MONITOR确认，演示数据单独标记DEMO_FIXTURE")
 public class AlarmController {
     private final InspectionService service;
 

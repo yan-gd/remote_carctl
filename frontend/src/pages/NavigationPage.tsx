@@ -3,6 +3,7 @@ import type { ApiClient } from '../api/client';
 import type { MapPose, NavigationStatus } from '../api/types';
 import { Card, ErrorNotice, StatusPill, errorMessage } from '../components/UI';
 import { MappingPanel } from '../mapping/MappingPanel';
+import { permissions, roleDescription } from '../auth/permissions';
 
 const REASONS: Record<string,string> = {
   NAVIGATION_DISABLED:'后端导航尚未启用',NO_LIVE_NAVIGATION_REPORT:'未收到新鲜导航报告',MAP_UNAVAILABLE:'没有可用的map地图',
@@ -41,8 +42,7 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
   const goalReference=useRef<string|null>(null);
   const alive=useRef(true);
   const submitting=useRef(false);
-  const canMove=role==='OPERATOR';
-  const canStop=canMove||role==='MONITOR';
+  const {move:canMove,stop:canStop}=permissions(role);
   const mission=!!status?.active || ['ACTIVE','PENDING'].includes(status?.robot?.state??'');
   const relative=status?.robot?.mode==='relative';
   const direct=relative&&!!status?.robot?.mapId?.startsWith('direct-');
@@ -133,6 +133,7 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
     relative&&status?.reason==='LOCALIZATION_UNAVAILABLE'?'odom → base_link里程计位姿不可用':
     REASONS[status?.reason??'']??status?.reason??'正在检查导航能力…';
   return <div className={`stack navigation-page${relative?' is-relative':''}`}>
+    {!canMove&&<p className="notice notice-info">{roleDescription(role)}</p>}
     {error&&<ErrorNotice message={error}/>}
     {notice&&<div className="notice notice-info">{notice}</div>}
     {!relative&&<MappingPanel api={api} role={role} mission={mission} navigation={status} navigationReason={reason}
@@ -154,7 +155,7 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
         <div><dt>{relative?'里程计位置（odom，米）':'定位（map，米）'}</dt><dd>{robot?.x==null||robot?.y==null?'—':`${robot.x.toFixed(2)}, ${robot.y.toFixed(2)}`}</dd></div>
         <div><dt>{relative?'导航会话':'地图指纹'}</dt><dd title={robot?.mapId??undefined}>{robot?.mapId?.slice(0,16)??'—'}</dd></div>
       </div>
-      <div className="point-list">
+      {canMove&&<><div className="point-list">
         {points.map((point,index)=><div className={`point-row${relative?' relative-goal-row':''}`} key={index}>
           <span className="point-index">{index+1}</span>
           {(['x','y','yaw'] as const).map(key=><label key={key}>{relative?({x:'前后 m（前＋ / 后−）',y:'左右 m（左＋ / 右−）',yaw:'相对朝向 rad'})[key]:key==='yaw'?'朝向 rad':`${key.toUpperCase()} m`}
@@ -169,10 +170,11 @@ export function NavigationPage({api,role}:{api:ApiClient;role:string}) {
         {!relative&&<><button className="button" disabled={!canMove||!!mission||points.length>=30} onClick={()=>setPoints(old=>[...old,{x:'',y:'',yaw:'0'}])}>添加目标点</button>
         <label className="navigation-cycles">轮次 <input type="number" min="1" max="20" value={cycles} disabled={!canMove||!!mission} onChange={e=>setCycles(e.target.value)}/></label></>}
         <button className="button primary" disabled={!canMove||!status?.ready||!!mission||busy} onClick={()=>void start()}>开始导航</button>
-        <button className="button danger" disabled={!canStop||busy} onClick={()=>void cancel()}>取消导航并停止</button>
       </div>
+      </>}
+      {canStop&&<button className="button danger" disabled={busy} onClick={()=>void cancel()}>取消导航并停止</button>}
       {relative&&<p className="fine-print">例如前方2米、左侧1米：填写 X=2、Y=1、朝向=0。{direct?'直接按里程计转向及前进，不绕开障碍；位置丢失或超时会停车，最多执行60秒。':'雷达未观测区域或目标周围有障碍时会拒绝；无法绕行会终止，最多执行60秒。'}</p>}
-      {!status?.ready&&<p className="notice notice-info">{direct?'请检查底盘、里程计定位及速度话题是否正常；本模式不需要雷达。':relative?'请保持底盘、雷达及相对导航进程运行，等待实时数据就绪；也可以继续人工遥控。':'可继续使用“控制”页人工遥控；地图、定位和避障条件就绪后再启动导航。'}</p>}
+      {!status?.ready&&<p className="notice notice-info">{!canMove?'请由远程巡检操作员检查导航条件；当前账号可查看地图和执行状态。':direct?'请检查底盘、里程计定位及速度话题是否正常；本模式不需要雷达。':relative?'请保持底盘、雷达及相对导航进程运行，等待实时数据就绪；也可以继续人工遥控。':'可继续使用“控制”页人工遥控；地图、定位和避障条件就绪后再启动导航。'}</p>}
     </Card>
   </div>;
 }

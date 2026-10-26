@@ -42,6 +42,55 @@ class RobotMonitorTest {
         monitor.onHeartbeat(new RobotHeartbeat(true, true, null));
     }
 
+    NavigationReport nav(String mission, String state, String reason, Boolean obstacle) {
+        return new NavigationReport("SCOUT-001", true, reason, "map", "map", state,
+                mission, 0, 1, 0., 0., 0., "map", obstacle, Boolean.TRUE.equals(obstacle)?0.5:null);
+    }
+
+    @Test void navigationObstacleDebouncesDeduplicatesAndRearmsAfterClear() {
+        beat();monitor.onNavigation(nav("one","ACTIVE","READY",true));
+        assertTrue(raised().isEmpty());
+        clock.advance(500);monitor.onNavigation(nav("one","ACTIVE","READY",true));
+        assertEquals(1,raised().size());
+        assertEquals("SCOUT-001:NAV_OBSTACLE",raised().get(0).source());
+        assertEquals(AlarmLevel.WARNING,raised().get(0).level());
+        for(int i=0;i<10;i++){clock.advance(500);beat();monitor.onNavigation(nav("one","ACTIVE","READY",true));}
+        assertEquals(1,raised().size());
+        monitor.onNavigation(nav("one","ACTIVE","READY",null));
+        clock.advance(500);beat();monitor.onNavigation(nav("one","ACTIVE","READY",true));
+        clock.advance(500);beat();monitor.onNavigation(nav("one","ACTIVE","READY",true));
+        assertEquals(1,raised().size(),"missing sensor data does not clear an obstacle episode");
+        monitor.onNavigation(nav("one","ACTIVE","READY",false));
+        clock.advance(2000);beat();monitor.onNavigation(nav("one","ACTIVE","READY",false));
+        monitor.onNavigation(nav("one","ACTIVE","READY",true));
+        clock.advance(500);beat();monitor.onNavigation(nav("one","ACTIVE","READY",true));
+        assertEquals(2,raised().size());
+    }
+
+    @Test void noObstacleAlertForIdleUnknownOfflineOrReportsSeparatedByOutage() {
+        monitor.onNavigation(nav("one","ACTIVE","READY",true));
+        clock.advance(500);monitor.onNavigation(nav("one","ACTIVE","READY",true));
+        assertTrue(raised().isEmpty());beat();
+        monitor.onNavigation(nav("one","IDLE","READY",true));
+        clock.advance(500);monitor.onNavigation(nav("one","IDLE","READY",true));
+        monitor.onNavigation(nav("one","ACTIVE","READY",null));
+        assertTrue(raised().isEmpty());
+        monitor.onNavigation(nav("one","ACTIVE","READY",true));
+        clock.advance(4000);beat();monitor.onNavigation(nav("one","ACTIVE","READY",true));
+        assertTrue(raised().stream().noneMatch(a->a.source().endsWith(":NAV_OBSTACLE")));
+    }
+
+    @Test void failuresAreSeparateFromObstacleEvidenceAndDoNotRepeatPerMission() {
+        beat();
+        monitor.onNavigation(nav("one","CANCELLED","NAVIGATION_NO_PROGRESS",null));
+        monitor.onNavigation(nav("one","CANCELLED","NAVIGATION_NO_PROGRESS",null));
+        assertEquals(1,raised().size());assertEquals("SCOUT-001:NAVIGATION",raised().get(0).source());
+        monitor.onNavigation(nav("two","CANCELLED","CLOUD_CANCEL",null));
+        assertEquals(1,raised().size());
+        monitor.onNavigation(nav("three","ABORTED","MOVE_BASE_RESULT_4",null));
+        assertEquals(2,raised().size());
+    }
+
     RobotTelemetry battery(Double pct, Double volts) {
         return new RobotTelemetry(MotionState.STOPPED, pct, volts, 0.0, 0.0, null, null, null);
     }

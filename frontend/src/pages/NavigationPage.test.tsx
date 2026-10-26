@@ -98,8 +98,8 @@ describe('autonomous navigation page',()=>{
   it('allows a viewer to inspect status but does not expose motion controls',async()=>{
     const api=client();render(<NavigationPage api={api as unknown as ApiClient} role="VIEWER"/>);
     await act(async()=>{});
-    expect(screen.getByRole('button',{name:'开始导航'})).toBeDisabled();
-    expect(screen.getByRole('button',{name:'取消导航并停止'})).toBeDisabled();
+    expect(screen.queryByRole('button',{name:'开始导航'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:'取消导航并停止'})).not.toBeInTheDocument();
     expect(api.startNavigation).not.toHaveBeenCalled();
   });
   it('submits one body-relative goal and hides map patrol controls',async()=>{

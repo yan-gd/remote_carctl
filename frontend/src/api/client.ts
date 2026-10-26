@@ -177,6 +177,8 @@ export class ApiClient {
     size?: number;
     level?: string;
     status?: string;
+    from?: string;
+    to?: string;
   } = {}): Promise<PageResult<AlarmItem>> {
     return this.request<PageResult<AlarmItem>>('/api/v1/alarms', {
       query: {
@@ -184,6 +186,8 @@ export class ApiClient {
         size: params.size ?? 20,
         level: params.level,
         status: params.status,
+        from: params.from,
+        to: params.to,
       },
     });
   }
@@ -196,12 +200,16 @@ export class ApiClient {
     page?: number;
     size?: number;
     operation?: string;
+    from?: string;
+    to?: string;
   } = {}): Promise<PageResult<ControlLogItem>> {
     return this.request<PageResult<ControlLogItem>>('/api/v1/control-logs', {
       query: {
         page: params.page ?? 1,
         size: params.size ?? 20,
         operation: params.operation,
+        from: params.from,
+        to: params.to,
       },
     });
   }
