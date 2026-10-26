@@ -18,8 +18,10 @@ class Adapter:
         self.cancelled = 0
         self.allowed = True
         self.fail = False
+        self.odometry = (0., 0., 0.)
 
     def health(self): return dict(self.health_value)
+    def motion_pose(self): return self.odometry
     def goal_allowed(self, point): return self.allowed
     def send_goal(self, point, done):
         if self.fail: raise RuntimeError('action server down')
@@ -86,6 +88,64 @@ class NavigationTest(BridgeTestCase):
             self.nav.command(self.order('KEEPALIVE'))
             self.nav.tick()
         self.assertEqual('GOAL_TIMEOUT',self.nav.reason)
+
+    def step(self, seconds=1):
+        self.clock.advance(seconds)
+        self.nav.command(self.order('KEEPALIVE'))
+        self.nav.accept_velocity(0., 0.3)
+        self.nav.tick()
+
+    def test_in_place_full_turn_stops_even_with_fresh_leases_and_wrapped_yaw(self):
+        self.nav.command(self.order(cycles=2)); self.nav.tick()
+        done = self.adapter.goals[0][1]
+        for i in range(1, 18):
+            yaw = 0.4*i
+            self.adapter.odometry = (0., 0., math.atan2(math.sin(yaw), math.cos(yaw)))
+            self.step()
+        self.assertEqual('NAVIGATION_SPIN_LIMIT', self.nav.reason)
+        self.assertEqual('CANCELLED', self.nav.state)
+        self.assertEqual((0., 0.), self.ros.velocities[-1])
+        self.assertEqual(1, self.adapter.cancelled)
+        done(3)  # Late completion cannot advance a cancelled patrol.
+        self.assertEqual(1, len(self.adapter.goals))
+
+    def test_no_displacement_times_out_despite_localization_jitter_and_renewals(self):
+        self.nav.command(self.order()); self.nav.tick()
+        for i in range(30):
+            self.adapter.odometry = (0.01*(i%2), 0., 0.)
+            self.adapter.health_value.update(x=i, y=i)  # AMCL jumps are not motion.
+            self.step()
+        self.assertEqual('NAVIGATION_NO_PROGRESS', self.nav.reason)
+        self.assertEqual((0., 0.), self.ros.velocities[-1])
+
+    def test_normal_half_turn_and_measured_translation_reset_progress_guard(self):
+        self.nav.command(self.order()); self.nav.tick()
+        for i in range(1, 22):
+            self.adapter.odometry = (0., 0., i*0.15)
+            self.step()
+        self.assertEqual('ACTIVE', self.nav.state)
+        for i in range(1, 41):
+            self.adapter.odometry = (i*0.02, 0., math.pi)
+            self.step()
+        self.assertEqual('ACTIVE', self.nav.state)
+        self.adapter.goals[0][1](3)
+        self.assertEqual('SUCCEEDED', self.nav.state)
+
+    def test_each_waypoint_gets_a_new_progress_window(self):
+        self.nav.command(self.order(cycles=2)); self.nav.tick()
+        for _ in range(25): self.step()
+        self.adapter.goals[0][1](3)
+        for _ in range(10): self.step()
+        self.assertEqual('ACTIVE', self.nav.state)
+        self.assertEqual(1, self.nav.index)
+
+    def test_invalid_measured_odometry_stops_without_publishing_motion(self):
+        for sample in ((None, 0, 0), (0, float('nan'), 0)):
+            self.nav.command(self.order())
+            self.adapter.odometry = sample
+            self.step()
+            self.assertEqual('NAVIGATION_ODOMETRY_UNAVAILABLE', self.nav.reason)
+            self.assertEqual((0., 0.), self.ros.velocities[-1])
 
     def test_health_loss_map_change_invalid_velocity_and_cancel_fail_closed(self):
         for cause in ('health','map','velocity','cancel'):
@@ -156,6 +216,16 @@ class NavigationTest(BridgeTestCase):
 
 
 class GridTest(unittest.TestCase):
+    def test_progress_pose_uses_only_fresh_odometry(self):
+        from scout_bridge_core import TelemetryCache
+        clock = FakeClock()
+        adapter = object.__new__(Ros1NavigationAdapter)
+        adapter.telemetry = TelemetryCache(1, clock)
+        adapter.telemetry.update_odometry(1, 2, 0.3)
+        self.assertEqual((1, 2, 0.3), adapter.motion_pose())
+        clock.advance(2)
+        self.assertEqual((None, None, None), adapter.motion_pose())
+
     def health_adapter(self):
         class Stamp:
             def __init__(self,value=0): self.value=value
@@ -253,3 +323,23 @@ class LaunchGuardTest(unittest.TestCase):
         self.assertEqual(2,len(includes))
         self.assertTrue(any('rslidar_sdk' in p for p in includes))
         self.assertTrue(any('pointcloud_to_laserscan' in p for p in includes))
+
+    def test_map_planner_owns_matching_low_speed_limits_and_disables_spin_recovery(self):
+        import yaml
+        node = self.launch('cloud_navigation.launch').find("node[@name='move_base']")
+        files = [p.get('file', '') for p in node.findall('rosparam')]
+        self.assertIn('$(dirname)/map_navigation.yaml', files)
+        self.assertFalse(any('move_base_params.yaml' in f or 'base_local_planner_params.yaml' in f for f in files))
+        path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'launch', 'map_navigation.yaml')
+        with open(path) as source: config = yaml.safe_load(source)
+        self.assertEqual('base_local_planner/TrajectoryPlannerROS', config['base_local_planner'])
+        planner = config['TrajectoryPlannerROS']
+        self.assertFalse(planner['holonomic_robot'])
+        limits = load_config()['navigation']
+        self.assertLessEqual(planner['max_vel_x'], limits['max_linear'])
+        self.assertLessEqual(planner['max_rotational_vel'], limits['max_angular'])
+        self.assertEqual(0, planner['escape_vel'])
+        self.assertFalse(config['recovery_behavior_enabled'])
+        self.assertFalse(config['clearing_rotation_allowed'])
+        self.assertEqual(30, config['oscillation_timeout'])
+        self.assertFalse(config['NavfnROS']['allow_unknown'])

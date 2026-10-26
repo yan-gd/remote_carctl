@@ -19,8 +19,9 @@
     <rosparam file="$(find scout_description)/param/4wd/costmap_common_params.yaml" command="load" ns="local_costmap" />
     <rosparam file="$(find scout_description)/param/4wd/global_costmap_params.yaml" command="load" />
     <rosparam file="$(find scout_description)/param/4wd/local_costmap_params.yaml" command="load" />
-    <rosparam file="$(find scout_description)/param/4wd/base_local_planner_params.yaml" command="load" />
-    <rosparam file="$(find scout_description)/param/4wd/move_base_params.yaml" command="load" />
+    <!-- Vendor move_base_params selects MPC; unrelated DWA parameters do not
+         configure that plugin. Own the planner and its matching limits here. -->
+    <rosparam file="$(dirname)/map_navigation.yaml" command="load" />
     <!-- Vendor YAML puts plugins at the root. Explicitly scope layers and scans. -->
     <rosparam param="global_costmap/plugins">
       - {name: static, type: "costmap_2d::StaticLayer"}

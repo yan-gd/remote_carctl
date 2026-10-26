@@ -84,6 +84,24 @@ bash robot-bridge/start-scout.sh --web-map
 - 网页显示原生 TF 转发的真实位姿和激光点。TF/激光缺失时不补假数据。map 导航发布完整局部代价地图，以满足既有健康检查。
 - 地图后台使用已有 move_base 地图导航；原相对导航和纯里程计模式仍保留，均没有被自动切换。
 
+## 规划失败或持续转圈
+
+2026-10-26 现场输出显示实际插件是 `mpc_local_planner/MpcLocalPlannerROS`，而设备同时留有 `DWAPlannerROS` 参数；这些参数不会配置 MPC。任务返回 status=4：找不到有效规划，恢复行为也失败。这确认任务失败，但不能仅凭该消息判定是定位偏差、障碍、机器人模型还是控制参数导致无可行轨迹。
+
+Web 地图 launch 现在使用仓库 `map_navigation.yaml`，明确选择 `base_local_planner/TrajectoryPlannerROS`，非全向模型，线速度上限0.15m/s、角速度上限0.3rad/s，关闭恢复行为和旋转清障；保留原代价地图及障碍检查。配置依据 [ROS Melodic TrajectoryPlannerROS](https://github.com/ros-planning/navigation/blob/melodic-devel/base_local_planner/src/trajectory_planner_ros.cpp) 和 [move_base 恢复逻辑](https://github.com/ros-planning/navigation/blob/melodic-devel/move_base/src/move_base.cpp)。
+
+桥接地图模式额外检查真实 `/odom`，每次相对监测起点位移达到0.1m才重置计时/累计转角；30秒未达到，或累计绝对转角达到2π，则取消任务、输出零速度。计数每个目标重新开始，AMCL定位跳动不会当作底盘位移；里程计缺失/过期同样停止。该保护针对原地停滞/转圈，并不检测所有绕圈路径，也不能修复错误地图或激光外参。
+
+更新小车代码并重启启动脚本后，必须在网页重新加载地图，新的 move_base 配置才会生效。停车状态下依次确认：
+
+```bash
+rosparam get /move_base/base_local_planner
+rosparam get /move_base/recovery_behavior_enabled
+rosparam get /move_base/clearing_rotation_allowed
+```
+
+预期分别为 `base_local_planner/TrajectoryPlannerROS`、`false`、`false`。确认小车初始位置/车头朝向及激光与静态墙面轮廓对齐后，再选附近已知空闲目标；失败时保留启动终端的 move_base 日志，不要反复重试或降低避障限制。
+
 ## 验收
 
 本地自动测试覆盖坐标旋转/Y轴翻转、图像留白与缩放、地图保存方向与防覆盖、命令权限/过期/会话变化、停稳检查、切换中STOP、网页选点与初始位姿区分、断线禁用、建图失焦停车。浏览器验证使用明确标识的本地测试数据，不是实车地图。

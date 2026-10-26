@@ -68,6 +68,14 @@ describe('autonomous navigation page',()=>{
     await act(async()=>{await vi.advanceTimersByTimeAsync(1000);});
     expect(screen.getByText('前往此处')).toBeEnabled();expect(api.startNavigation).not.toHaveBeenCalled();
   });
+  it('shows the on-robot spin stop next to the map without restarting the mission',async()=>{
+    const api=client();api.mappingStatus.mockResolvedValue(loaded);
+    api.navigationStatus.mockResolvedValue({...ready,reason:'NAVIGATION_SPIN_LIMIT',robot:{...ready.robot!,state:'CANCELLED'}});
+    render(<NavigationPage api={api as unknown as ApiClient} role="OPERATOR"/>);
+    await act(async()=>{});
+    expect(screen.getByText(/上次导航已停止：小车原地累计转向达到一圈/)).toBeInTheDocument();
+    expect(api.startNavigation).not.toHaveBeenCalled();
+  });
   it('leaves the backend-owned mission running when switching to the camera or losing focus',async()=>{
     const api=client();
     api.startNavigation.mockImplementation(async()=>{

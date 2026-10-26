@@ -140,6 +140,8 @@ export function MappingPanel({api,role,mission,onGoal,onNavigate,onReference,nav
       <button className="button danger" disabled={!canStop} onClick={()=>{setPressed(null);void controller.stop(true);}}>立即停车</button>
     </div>}
     {grid&&live?<>
+      {sameMap&&['CANCELLED','ABORTED','REJECTED'].includes(navigation?.robot?.state??'')&&
+        <p className="notice notice-error">上次导航已停止：{navigationReason}</p>}
       {robot?.mode==='NAVIGATION'&&<div className="notice notice-info" role="status">
         {mission?'正在执行导航，可使用“取消导航并停止”结束任务。':needsInitial?
           '先定位小车：请在地图上点击小车当前实际所在的位置，朝车头方向拖动，再点击“确认小车初始位置”。这一步完成后才能选择目的地。':

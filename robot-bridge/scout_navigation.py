@@ -70,6 +70,10 @@ class NavigationManager:
         self.generation = 0
         self.relative_origin = self.relative_last = None
         self.relative_travel = 0
+        self.progress_origin = None
+        self.progress_at = 0
+        self.progress_yaw = None
+        self.progress_turn = 0.0
 
     def report(self):
         with self.lock:
@@ -151,6 +155,8 @@ class NavigationManager:
         generation = self.generation
         self.state = 'ACTIVE'
         self.goal_at = self.clock()
+        self.progress_origin = self.progress_yaw = None
+        self.progress_at, self.progress_turn = self.goal_at, 0.0
         self.velocity = (0.0, 0.0)
         self.velocity_at = 0
         try:
@@ -206,8 +212,36 @@ class NavigationManager:
             elif self.relative_origin is not None and not self._within_relative_bounds(health):
                 self.cancel('RELATIVE_TRAVEL_LIMIT')
             else:
-                self.send(*(self.velocity if self.clock() - self.velocity_at < 0.35 else (0.0, 0.0)))
+                failure = self._progress_failure()
+                if failure:
+                    self.cancel(failure)
+                else:
+                    self.send(*(self.velocity if self.clock() - self.velocity_at < 0.35 else (0.0, 0.0)))
             return True
+
+    def _progress_failure(self):
+        # Use fresh measured odometry, not AMCL corrections or commanded speed.
+        # Relative/direct modes retain their existing short-range guards.
+        if self.config.get('mode', 'map') != 'map':
+            return None
+        try:
+            x, y, yaw = self.adapter.motion_pose()
+            if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in (x, y, yaw)):
+                return 'NAVIGATION_ODOMETRY_UNAVAILABLE'
+        except Exception:
+            return 'NAVIGATION_ODOMETRY_UNAVAILABLE'
+        if self.progress_origin is None or math.hypot(x-self.progress_origin[0], y-self.progress_origin[1]) >= 0.1:
+            self.progress_origin, self.progress_yaw = (x, y), yaw
+            self.progress_at, self.progress_turn = self.clock(), 0.0
+        else:
+            delta = yaw-self.progress_yaw
+            self.progress_turn += abs(math.atan2(math.sin(delta), math.cos(delta)))
+            self.progress_yaw = yaw
+        if self.progress_turn >= 2*math.pi:
+            return 'NAVIGATION_SPIN_LIMIT'
+        if self.clock()-self.progress_at >= 30:
+            return 'NAVIGATION_NO_PROGRESS'
+        return None
 
     def _within_relative_bounds(self, health):
         current = health.get('x'), health.get('y')
@@ -243,6 +277,10 @@ class NavigationManager:
 
 
 class Ros1NavigationAdapter:
+    def motion_pose(self):
+        position = self.telemetry.report()['position']
+        return position['x'], position['y'], position['yaw']
+
     def __init__(self, config, ros, telemetry):
         import actionlib
         import rospy

@@ -1,6 +1,6 @@
 # exp3 项目进度与 Agent 交接
 
-更新时间：2026-10-26（Asia/Singapore）。本文记录代码状态、用户提供的现场结果和后续工作边界，供后续 Agent 接续；不是完整测试报告。**最新地图直接导航与定位引导见第21节，现场 AttributeError 修复见第20节；第15节的后端续约设计取代第14节前台续约；早期“没有导航”等描述已过时。** 原有部署见 [README 的 Quick Start](README.md#3-quick-start服务器--小车端)，新增能力见 [NAVIGATION-CAMERA.md](docs/NAVIGATION-CAMERA.md)。
+更新时间：2026-10-26（Asia/Singapore）。本文记录代码状态、用户提供的现场结果和后续工作边界，供后续 Agent 接续；不是完整测试报告。**最新规划失败/转圈处置见第22节，地图直接导航与定位引导见第21节，现场 AttributeError 修复见第20节；第15节的后端续约设计取代第14节前台续约；早期“没有导航”等描述已过时。** 原有部署见 [README 的 Quick Start](README.md#3-quick-start服务器--小车端)，新增能力见 [NAVIGATION-CAMERA.md](docs/NAVIGATION-CAMERA.md)。
 
 ## 1. 接手时先知道这些
 
@@ -610,3 +610,11 @@ bash frontend/deploy/smoke-test.sh agilex.yoyoyan.cn
 - `INITIAL_POSE_REQUIRED` 时自动引导设置小车当前位置，明确区别于目的地；收到真实 ready 后切回目标模式并清空初始位姿选点，绝不自动出发。地图旁同步展示未就绪原因，导航状态查询失败也关闭出发按钮。
 - 前端48项测试通过，生产构建通过。浏览器使用本地接口夹具和生成地图，验证定位确认→就绪→选点→单点提交；因浏览器自动化鼠标事件未送达，地图与后续按钮使用合成事件验证。检查1440桌面、390手机截图，手机无横向溢出；不是实车运行验证。
 - 本轮只需发布服务器前端静态文件；无需改后端环境、数据库或小车进程。修改尚未提交推送；现场仍须确认实际位置和激光轮廓对齐，若之后报传感器/TF等原因，需据具体回执继续排查，不能声称实车已到达。
+
+## 22. 2026-10-26 现场转圈、规划失败及停车保护
+
+- 用户确认实际局部规划器是 `mpc_local_planner/MpcLocalPlannerROS`，TrajectoryPlannerROS 参数缺失，另有DWA参数但不是当前插件；`/move_base/status` 返回4和 `Failed to find a valid plan. Even after executing recovery behaviors.`。不是网页未提交目标；尚不能从该结果确定无可行规划的物理根因。
+- `cloud_navigation.launch` 移除厂商的规划器/MPC选择文件，加载本仓库 `map_navigation.yaml`：明确标准非全向TrajectoryPlannerROS，0.15m/s、0.3rad/s上限，关闭自动恢复和旋转清障；保留厂商costmap/AMCL、障碍检查与速度仲裁。依赖已在start-scout预检中。
+- 地图模式增加本地真实里程计保护：在0.1m位移监测区域内累计转向2π或停滞30s取消并停车；不用AMCL坐标或命令速度判定运动，odom过期/无效立即取消。每点重置，取消后的迟到成功不能推进巡逻。相对/direct原边界保留。
+- 网页增加停止原因中文说明并在地图旁显示上次失败；没有自动重试或自动出发。106项Python测试通过（含转角跨π、静止抖动、正常半圈转向/位移、逐点重置、过期odom和launch配置），前端49项测试及生产构建通过。尚未提交、推送或部署，不能把测试记为实车恢复。
+- 部署需更新小车并重启 `start-scout.sh --web-map`，网页重新加载地图再核对实际planner/recovery参数；服务器只需更新前端以显示停止原因，无需重编后端。现场重新确认位置/朝向与激光对齐后验收，失败保留真实move_base日志，不降低障碍限制。文档见 `docs/WEB-MAPPING.md` 新增排查节。
