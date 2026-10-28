@@ -1,0 +1,281 @@
+{
+  "info": {
+    "name": "remote_carctl 接口",
+    "description": "手工导入用。自动化结果以 tests/api 的 pytest 为准。先运行「登录-操作员」。baseUrl 默认 http://127.0.0.1:18080。设备密钥和密码只用于本地测试库。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "baseUrl", "value": "http://127.0.0.1:18080"},
+    {"key": "username", "value": "demo_operator"},
+    {"key": "password", "value": "TestDemo123!"},
+    {"key": "operatorToken", "value": ""},
+    {"key": "monitorToken", "value": ""},
+    {"key": "adminToken", "value": ""},
+    {"key": "cameraKey", "value": "camera-device-key-0123456789abcdef"},
+    {"key": "mappingKey", "value": "mapping-device-key-0123456789abcd"},
+    {"key": "routeId", "value": ""},
+    {"key": "alarmId", "value": ""}
+  ],
+  "item": [
+    {
+      "name": "认证",
+      "item": [
+        {
+          "name": "登录-操作员",
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "var data = pm.response.json().data;",
+            "pm.collectionVariables.set('operatorToken', data.token);"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"},
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "登录-监控员",
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "pm.collectionVariables.set('monitorToken', pm.response.json().data.token);"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"username\": \"demo_monitor\",\n  \"password\": \"{{password}}\"\n}"},
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "登录-管理员",
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+            "pm.test('200', function () { pm.response.to.have.status(200); });",
+            "pm.collectionVariables.set('adminToken', pm.response.json().data.token);"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"TestAdmin123!\"\n}"},
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "当前用户",
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('200', function () { pm.response.to.have.status(200); });"]}}],
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{operatorToken}}"}],
+            "url": "{{baseUrl}}/api/v1/auth/me"
+          }
+        },
+        {
+          "name": "错误密码",
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('401', function () { pm.response.to.have.status(401); });"]}}],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"username\": \"demo_operator\",\n  \"password\": \"WrongPass123!\"\n}"},
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "路线与任务",
+      "item": [
+        {
+          "name": "创建路线",
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+            "pm.test('201', function () { pm.response.to.have.status(201); });",
+            "pm.collectionVariables.set('routeId', pm.response.json().data.id);"
+          ]}}],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{operatorToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Postman路线\",\n  \"description\": \"仅数据\",\n  \"points\": [{\"sequence\": 0, \"x\": 1.5, \"y\": 2.0, \"yaw\": 0}, {\"sequence\": 1, \"x\": 3, \"y\": 4.5}]\n}"},
+            "url": "{{baseUrl}}/api/v1/routes"
+          }
+        },
+        {
+          "name": "路线列表",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{operatorToken}}"}],
+            "url": "{{baseUrl}}/api/v1/routes?page=1&size=20"
+          }
+        },
+        {
+          "name": "创建草稿任务",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{operatorToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Postman任务\",\n  \"routeId\": {{routeId}},\n  \"status\": \"DRAFT\"\n}"},
+            "url": "{{baseUrl}}/api/v1/tasks"
+          }
+        }
+      ]
+    },
+    {
+      "name": "告警与日志",
+      "item": [
+        {
+          "name": "告警列表",
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": [
+            "var items = pm.response.json().data.items;",
+            "if (items.length) pm.collectionVariables.set('alarmId', items[0].id);"
+          ]}}],
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{operatorToken}}"}],
+            "url": "{{baseUrl}}/api/v1/alarms?page=1&size=20"
+          }
+        },
+        {
+          "name": "监控员确认告警",
+          "request": {
+            "method": "PATCH",
+            "header": [{"key": "Authorization", "value": "Bearer {{monitorToken}}"}],
+            "url": "{{baseUrl}}/api/v1/alarms/{{alarmId}}/ack"
+          }
+        },
+        {
+          "name": "操作日志",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{operatorToken}}"}],
+            "url": "{{baseUrl}}/api/v1/control-logs?page=1&size=20"
+          }
+        }
+      ]
+    },
+    {
+      "name": "机器人",
+      "item": [
+        {
+          "name": "基本信息",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{operatorToken}}"}],
+            "url": "{{baseUrl}}/api/v1/robot"
+          }
+        },
+        {
+          "name": "运行状态",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{operatorToken}}"}],
+            "url": "{{baseUrl}}/api/v1/robot/status"
+          }
+        },
+        {
+          "name": "停止",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{operatorToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {"mode": "raw", "raw": "{\n  \"command\": \"STOP\"\n}"},
+            "url": "{{baseUrl}}/api/v1/robot/control"
+          }
+        },
+        {
+          "name": "非法命令",
+          "event": [{"listen": "test", "script": {"type": "text/javascript", "exec": ["pm.test('400', function () { pm.response.to.have.status(400); });"]}}],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{operatorToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {"mode": "raw", "raw": "{\n  \"command\": \"forward\"\n}"},
+            "url": "{{baseUrl}}/api/v1/robot/control"
+          }
+        }
+      ]
+    },
+    {
+      "name": "导航摄像头建图",
+      "item": [
+        {
+          "name": "导航状态",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{operatorToken}}"}],
+            "url": "{{baseUrl}}/api/v1/navigation"
+          }
+        },
+        {
+          "name": "摄像头状态",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{operatorToken}}"}],
+            "url": "{{baseUrl}}/api/v1/camera/status"
+          }
+        },
+        {
+          "name": "上传JPEG",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "image/jpeg"},
+              {"key": "X-Device-Key", "value": "{{cameraKey}}"}
+            ],
+            "body": {"mode": "file", "file": {"src": ""}},
+            "url": "{{baseUrl}}/api/v1/device/camera/frame",
+            "description": "选择一个小于 384KiB 的 JPEG 文件后再发送。"
+          }
+        },
+        {
+          "name": "建图状态",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{operatorToken}}"}],
+            "url": "{{baseUrl}}/api/v1/mapping"
+          }
+        },
+        {
+          "name": "设备交换建图状态",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "X-Device-Key", "value": "{{mappingKey}}"}
+            ],
+            "body": {"mode": "raw", "raw": "{\n  \"session\": \"sess-1\",\n  \"mode\": \"IDLE\",\n  \"busy\": false,\n  \"mapId\": \"live-map\",\n  \"maps\": [\"warehouse\"],\n  \"pose\": {\"x\": 0, \"y\": 0, \"yaw\": 0},\n  \"scan\": [],\n  \"path\": []\n}"},
+            "url": "{{baseUrl}}/api/v1/device/mapping/exchange"
+          }
+        }
+      ]
+    },
+    {
+      "name": "管理员",
+      "item": [
+        {
+          "name": "用户列表",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{adminToken}}"}],
+            "url": "{{baseUrl}}/api/v1/admin/users"
+          }
+        }
+      ]
+    },
+    {
+      "name": "文档",
+      "item": [
+        {
+          "name": "OpenAPI",
+          "request": {"method": "GET", "header": [], "url": "{{baseUrl}}/v3/api-docs"}
+        }
+      ]
+    }
+  ]
+}
