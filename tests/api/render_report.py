@@ -18,6 +18,10 @@ def main() -> None:
     source = Path(sys.argv[1] if len(sys.argv) > 1 else "docs/test-report/last-run.json")
     target = Path(sys.argv[2] if len(sys.argv) > 2 else "docs/test-report/接口测试报告.md")
     data = json.loads(source.read_text(encoding="utf-8"))
+    baseline = None
+    baseline_path = source.parent / "last-run.json"
+    if source.name == "last-run-fix.json" and baseline_path.is_file():
+        baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
     meta = data.get("meta") or {}
     counts = data["counts"]
     latency = data.get("latency_ms") or {}
@@ -35,7 +39,7 @@ def main() -> None:
     lines: list[str] = []
     lines.append("# remote_carctl 接口测试报告")
     lines.append("")
-    lines.append("本报告由 `tests/api/render_report.py` 根据同目录 `last-run.json` 生成。表中的通过、失败、跳过数量和时延都来自这次 pytest 的真实执行，没有手填。")
+    lines.append("本报告由 `tests/api/render_report.py` 根据真实 pytest 结果生成，数字没有手填。本分支只有测试和报告，不含快照修复。用例表和时延来自对修复构建的复跑；初次在 main 上发现缺陷的记录单独保留。")
     lines.append("")
     lines.append("## 1. 项目概述")
     lines.append("")
@@ -60,6 +64,8 @@ def main() -> None:
     lines.append(f"| Python | {cell(meta.get('python'))} |")
     lines.append(f"| Java | {cell(meta.get('java')).replace(chr(10), ' / ')} |")
     lines.append(f"| 结束时间（UTC） | {cell(meta.get('finished_at'))} |")
+    if meta.get("code_under_test"):
+        lines.append(f"| 本次用例表对应的代码 | {cell(meta.get('code_under_test'))} |")
     lines.append("| 主服务 | `http://127.0.0.1:18080`，MQTT 开启，导航开启，摄像头与建图设备密钥已配置，低电量阈值 24V |")
     lines.append("| 对照服务 | `http://127.0.0.1:18081`，`PATROL_MQTT_ENABLED=false`，未配置设备密钥 |")
     lines.append("| Broker | Mosquitto，仅监听 `127.0.0.1:11883`，允许匿名，无持久化 |")
@@ -150,6 +156,9 @@ def main() -> None:
     lines.append("")
     lines.append("## 5. 用例与实际结果")
     lines.append("")
+    if baseline:
+        lines.append("下表是复跑。OFF-13 的期望是 HTTP 503 / `CAMERA_DISABLED`。服务进程是 PR #2 的 JAR，不是本分支源码编出来的。")
+    lines.append("")
     lines.append("| 编号 | 类别 | 接口 | 场景 | 期望 | 实际 | 耗时 ms | 结果 |")
     lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
     for row in cases:
@@ -180,41 +189,66 @@ def main() -> None:
     lines.append("")
     lines.append("## 6. 结果汇总")
     lines.append("")
-    lines.append("| 结果 | 数量 |")
-    lines.append("| --- | --- |")
-    lines.append(f"| 通过 | {counts['pass']} |")
-    lines.append(f"| 失败 | {counts['fail']} |")
-    lines.append(f"| 跳过（未执行） | {counts['skip']} |")
-    lines.append(f"| 合计 | {counts['total']} |")
+    if baseline:
+        base_counts = baseline["counts"]
+        lines.append("两次运行的脚本都在本分支。本分支没有快照修复；复跑时换成了 PR #2（`cursor/fix-camera-snapshot-503-061b`）打出来的 JAR。第 5 节的用例表、失败片段和下面的时延只描述复跑。")
+        lines.append("")
+        lines.append("| 运行 | 代码 | 通过 | 失败 | 跳过 | 合计 | 原始记录 |")
+        lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+        lines.append(
+            f"| 初次，用来发现缺陷 | main，当时 OFF-13 期望 406 | {base_counts['pass']} | {base_counts['fail']} | {base_counts['skip']} | {base_counts['total']} | `docs/test-report/last-run.json` |"
+        )
+        lines.append(
+            f"| 复跑 | PR #2 的修复 JAR，OFF-13 期望 503 / CAMERA_DISABLED | {counts['pass']} | {counts['fail']} | {counts['skip']} | {counts['total']} | `docs/test-report/last-run-fix.json` |"
+        )
+    else:
+        lines.append("| 结果 | 数量 |")
+        lines.append("| --- | --- |")
+        lines.append(f"| 通过 | {counts['pass']} |")
+        lines.append(f"| 失败 | {counts['fail']} |")
+        lines.append(f"| 跳过（未执行） | {counts['skip']} |")
+        lines.append(f"| 合计 | {counts['total']} |")
     lines.append("")
-    lines.append(f"已记录时延的用例：最小 {latency.get('min')} ms，平均 {latency.get('avg')} ms，最大 {latency.get('max')} ms。摄像头流和快照等自行计时的用例没有写入耗时。")
+    lines.append(f"复跑里已记录时延的用例：最小 {latency.get('min')} ms，平均 {latency.get('avg')} ms，最大 {latency.get('max')} ms。摄像头流和快照等自行计时的用例没有写入耗时。")
     lines.append("")
-    lines.append(f"pytest 退出码：{meta.get('pytest_exitstatus')}。本次进程输出为 15 个测试函数通过、2 个失败（`test_snapshot_jpeg_accept_when_camera_disabled` 与 `test_snapshot_json_accept_when_camera_disabled`）。上表按接口用例计数，一个函数里可以包含多条用例；4 条跳过记在通过的函数 `test_not_executable_interfaces` 中，不计为失败。")
+    lines.append(f"复跑 pytest 退出码：{meta.get('pytest_exitstatus')}。跳过的用例不计为失败。")
     lines.append("")
     lines.append("## 7. 缺陷")
     lines.append("")
-    if not failed:
+    baseline_failed = [row for row in (baseline or {}).get("cases", []) if row.get("result") == "FAIL"]
+    if baseline and not failed:
+        lines.append("复跑没有失败用例。下面是初次在 main 上记录到的缺陷；修复提交在 PR #2，不在本分支。")
+        lines.append("")
+        lines.append("快照接口当时声明 `produces = image/jpeg`。未配置摄像头时控制器抛出 `CAMERA_DISABLED`，异常处理却要写 JSON。`Accept: image/jpeg` 写不回 JSON，变成空的 HTTP 500。`Accept: application/json` 在进入方法前协商失败，通用处理写成 HTTP 500 / `INTERNAL_ERROR`。成功取帧在 `Accept: */*` 下仍返回 JPEG。")
+        lines.append("")
+        for index, row in enumerate(baseline_failed, 1):
+            lines.append(f"### 初次运行缺陷 {index}：{row['id']} {row['title']}")
+            lines.append("")
+            lines.append("- 严重程度：中。成功取帧不受影响，失败响应被写成 500。")
+            lines.append(f"- 接口：`{row['method']} {row['path']}`")
+            lines.append(f"- 当时期望：HTTP {row['expected_status']} / {row.get('expected_code') or '无独立业务码'}")
+            lines.append(f"- 当时实际：HTTP {row['actual_status']} / {row.get('actual_code') or '无 JSON 业务码'} {cell(row.get('actual_message'))}")
+            lines.append(f"- 响应片段：{cell(row.get('snippet')) or '(空)'}")
+            lines.append("")
+        lines.append("复跑把 OFF-13 的期望改成 HTTP 503 / `CAMERA_DISABLED`，并改用 PR #2 的 JAR。OFF-10 与 OFF-13 的复跑结果见第 5 节。")
+        lines.append("")
+    elif not failed:
         lines.append("本次按控制器和 MQTT 协议约定执行的用例全部通过，没有发现可复现的接口缺陷。")
         lines.append("")
         lines.append("文档差异（不作为失败用例）：`backend/docs/API.md` 和 `backend/README.md` 仍描述 20 个早期接口，并写着后端没有前端、导航和视频。当前代码已经提供管理员、摄像头、建图和导航接口，OpenAPI 也能列出它们。")
     else:
-        ids = {row["id"] for row in failed}
-        if "OFF-10" in ids or "OFF-13" in ids:
-            lines.append("快照接口 `GET /api/v1/camera/snapshot` 声明 `produces = image/jpeg`。摄像头未配置时，控制器抛出业务异常 `CAMERA_DISABLED`（本应 HTTP 503，正文为 JSON）。异常处理方法返回 JSON，但客户端 `Accept: image/jpeg` 无法接受该表示，Spring 记录 `HttpMediaTypeNotAcceptableException: Could not find acceptable representation`，原始异常接着变成 HTTP 500 且响应体为空。客户端改发 `Accept: application/json` 时，内容协商在进入方法前失败，通用异常处理把它写成 HTTP 500 / `INTERNAL_ERROR`，而不是 406。成功路径在 `Accept: */*` 下仍能返回 JPEG。业务代码未修改。")
-            lines.append("")
-        lines.append("下列失败是这次运行的真实结果。业务代码未改。")
+        lines.append("下列失败是这次运行的真实结果。")
         lines.append("")
         for index, row in enumerate(failed, 1):
             lines.append(f"### 缺陷 {index}：{row['id']} {row['title']}")
             lines.append("")
             code = row.get("expected_code") or "无独立业务码"
             actual_code = row.get("actual_code") or "无 JSON 业务码"
-            lines.append("- 严重程度：中。成功取帧不受影响，失败响应被写成 500，调用方无法按文档处理。")
+            lines.append("- 严重程度：中。")
             lines.append(f"- 接口：`{row['method']} {row['path']}`")
             lines.append(f"- 期望：HTTP {row['expected_status']} / {code}")
             lines.append(f"- 实际：HTTP {row['actual_status']} / {actual_code} {cell(row.get('actual_message'))}")
-            lines.append(f"- 说明：{cell(row.get('error')) or '见本节开头的原因说明。'}")
-            lines.append("- 复现：按 `tests/api/run.sh` 启动临时 Broker 和两个后端进程，执行对应 pytest 用例。响应片段如下：")
+            lines.append(f"- 说明：{cell(row.get('error')) or '见响应片段。'}")
             lines.append("")
             lines.append("```")
             lines.append(cell(row.get("snippet")) or "(空)")

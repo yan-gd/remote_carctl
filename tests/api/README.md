@@ -45,5 +45,8 @@ python -m pytest tests/api -q
 
 | 文件 | 内容 |
 | --- | --- |
-| `docs/test-report/接口测试报告.md` | 中文报告 |
-| `docs/test-report/last-run.json` | 用例级原始结果，Token 和密码已打码 |
+| `docs/test-report/接口测试报告.md` | 中文报告。区分 main 上的初次运行和针对 PR #2 修复包的复跑 |
+| `docs/test-report/last-run.json` | 初次运行（main 上的后端，164/2/4），Token 和密码已打码 |
+| `docs/test-report/last-run-fix.json` | 复跑（PR #2 的 JAR，期望已改为 503 / CAMERA_DISABLED） |
+
+Postman 集合没有把快照失败写成 406，因此这次没有改集合里的断言。

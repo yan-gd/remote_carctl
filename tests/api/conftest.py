@@ -130,6 +130,7 @@ def pytest_sessionfinish(session, exitstatus):
         except Exception as exc:
             return str(exc)
 
+    META["code_under_test"] = os.environ.get("CODE_UNDER_TEST", "")
     META["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     META["python"] = platform.python_version()
     META["os"] = platform.platform()

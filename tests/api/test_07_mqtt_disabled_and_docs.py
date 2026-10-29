@@ -162,12 +162,12 @@ def test_snapshot_json_accept_when_camera_disabled():
     viewer = login("demo_viewer", _password("demo"), BASE_NO_MQTT)
     api(
         "OFF-13",
-        "快照接口在 Accept 为 JSON 时应返回 406",
+        "未配置摄像头密钥且 Accept 为 JSON 时，快照应返回 503 JSON",
         "GET",
         "/api/v1/camera/snapshot",
         category="异常",
-        expected_status=406,
-        expected_code=None,
+        expected_status=503,
+        expected_code="CAMERA_DISABLED",
         token=viewer["token"],
         base=BASE_NO_MQTT,
         headers={"Accept": "application/json"},
