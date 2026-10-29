@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import static org.junit.jupiter.api.Assertions.*;
+import org.springframework.http.MediaType;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -106,7 +107,7 @@ class CameraNavigationApiTest {
         try {
             relay.accept(JPEG); // An old image is not a snapshot cache.
             var response=executor.submit(()->mvc.perform(get("/api/v1/camera/snapshot")
-                .header("Authorization",jwt)).andReturn().getResponse());
+                .accept(MediaType.IMAGE_JPEG).header("Authorization",jwt)).andReturn().getResponse());
             long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(3);
             while(relay.status().viewers()==0 && System.nanoTime()<deadline) Thread.sleep(10);
             assertEquals(1,relay.status().viewers());
@@ -115,6 +116,7 @@ class CameraNavigationApiTest {
                 .contentType("image/jpeg").content(JPEG)).andExpect(status().isOk());
             var snapshot=response.get(3,TimeUnit.SECONDS);
             assertEquals(200,snapshot.getStatus());
+            assertTrue(snapshot.getContentType().startsWith("image/jpeg"));
             assertArrayEquals(JPEG,snapshot.getContentAsByteArray());
             assertTrue(snapshot.getHeader("Cache-Control").contains("no-store"));
             assertEquals("no",snapshot.getHeader("X-Accel-Buffering"));
