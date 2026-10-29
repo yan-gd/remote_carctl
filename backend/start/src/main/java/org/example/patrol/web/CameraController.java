@@ -3,11 +3,12 @@ package org.example.patrol.web;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.patrol.app.CameraRelay;
 import org.example.patrol.client.ApiResponse;
 import org.example.patrol.domain.BusinessException;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
@@ -22,10 +23,12 @@ import java.util.Map;
 @Tag(name = "摄像头", description = "实时转发，不写数据库/文件；无历史录像。最多8个观看或拍照连接")
 public class CameraController {
     private final CameraRelay relay;
+    private final ObjectMapper json;
     private final byte[] deviceKey;
 
-    public CameraController(CameraRelay relay, @Value("${PATROL_CAMERA_DEVICE_KEY:}") String key) {
+    public CameraController(CameraRelay relay, ObjectMapper json, @Value("${PATROL_CAMERA_DEVICE_KEY:}") String key) {
         this.relay = relay;
+        this.json = json;
         if (!key.isEmpty() && (key.length() < 32 || key.length() > 256))
             throw new IllegalArgumentException("PATROL_CAMERA_DEVICE_KEY需要32-256个字符");
         this.deviceKey = key.getBytes(StandardCharsets.UTF_8);
@@ -76,8 +79,8 @@ public class CameraController {
         }
     }
 
-    @GetMapping(value = "/api/v1/camera/snapshot", produces = "image/jpeg")
-    @Operation(summary = "拍摄下一张实时画面", description = "等待新帧最多5秒，不读取历史缓存；返回JPEG，服务端随响应释放")
+    @GetMapping("/api/v1/camera/snapshot")
+    @Operation(summary = "拍摄下一张实时画面", description = "等待新帧最多5秒，不读取历史缓存；成功时返回JPEG。未配置或无新画面时返回JSON错误，不因Accept而变成500")
     public void snapshot(HttpServletResponse response) throws IOException {
         requireEnabled();
         try (var subscription = relay.subscribe()) {
@@ -105,8 +108,14 @@ public class CameraController {
     }
 
     @ExceptionHandler(BusinessException.class)
-    public ResponseEntity<ApiResponse<Void>> rejected(BusinessException e) {
+    public void rejected(BusinessException e, HttpServletResponse response) throws IOException {
         // High-frequency camera errors must not create a database entry per video frame.
-        return ResponseEntity.status(GlobalExceptionHandler.status(e)).body(ApiResponse.error(e.getCode(), e.getMessage()));
+        // Write JSON directly: a ResponseEntity would be negotiated against Accept, so
+        // image/jpeg could not carry CAMERA_DISABLED and Spring turned it into HTTP 500.
+        if (response.isCommitted()) return;
+        response.setStatus(GlobalExceptionHandler.status(e));
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        json.writeValue(response.getOutputStream(), ApiResponse.error(e.getCode(), e.getMessage()));
     }
 }
